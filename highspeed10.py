@@ -46,7 +46,7 @@ class SerialCommunication:
         except Exception as e:
             print(f"Error during data recording: {e}")
 
-    def record_live(self, duration, save_csv=False, filename="test.csv"):
+    def stream_data(self, duration, save_csv=False, filename="test.csv"):
         try:
             with serial.Serial(self.port, self.baudrate, timeout=1) as ser, open(filename, mode="w", newline="") as file:
                 writer = csv.writer(file)
@@ -59,7 +59,7 @@ class SerialCommunication:
                         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
                         if save_csv:
                             writer.writerow([timestamp] + list(data))
-                        yield timestamp, list(data)
+                        yield [timestamp] + list(data)
                 if save_csv:
                     print(f"Data saved successfully to {filename}.")
         except Exception as e:
