@@ -15,6 +15,28 @@ WAIT_TIME = 3600  # 1 hour in seconds
 TOTAL_HOURS = 5  # Number of hours to record data
 FREQUENCY = 100  # Packets per second
 
+# class maya:
+#     def __init__(self, *args, **kwargs):
+#         self.data = []
+#         self.times = []
+#         self.sensor_data = []
+#         self.serial_comm = SerialCommunication(PORT, BAUDRATE)
+#         self.PCF_flags = [True for i in range(16)]           # All sensors ON
+#         self.PCF_frequencies = ["0" for i in range(16)]      # All sensors at 0Hz
+#         self.dac1_value = 800
+#         self.dac2_value = 200
+#         self.dac_freq = FREQUENCY
+#
+# class params:
+#     def __init__(self):
+#         self.sampling_freq = 10
+#         self.dac1_value = 800
+#         self.dac2_value = 200
+#         self.dac_freq = 10
+#         self.PCF_flags = [True for i in range(16)]          # All sensors ON
+#         self.PCF_frequencies = ["0" for i in range(16)]     # All sensors at 0Hz
+
+
 class SerialCommunication:
     def __init__(self, port, baudrate):
         self.port = port
@@ -49,10 +71,11 @@ class SerialCommunication:
     def stream_data(self, duration, save_csv=False, filename="test.csv"):
         try:
             with serial.Serial(self.port, self.baudrate, timeout=1) as ser, open(filename, mode="w", newline="") as file:
-                writer = csv.writer(file)
-                writer.writerow(["Timestamp", "Data"])
-
+                if save_csv:
+                    writer = csv.writer(file)
+                    writer.writerow(["Timestamp", "Data"])
                 start_time = time.time()
+                print('Streaming data...')
                 while time.time() - start_time < duration and self.is_running:
                     if ser.in_waiting >= PACKET_SIZE:
                         data = ser.read(PACKET_SIZE)
@@ -62,8 +85,69 @@ class SerialCommunication:
                         yield [timestamp] + list(data)
                 if save_csv:
                     print(f"Data saved successfully to {filename}.")
+                print('Done')
         except Exception as e:
             print(f"Error during data recording: {e}")
+
+class PCF8575Control_:
+    def __init__(self, serial_comm, flags=[True for i in range(16)], frequencies=["0" for i in range(16)]):
+        self.serial_comm = serial_comm
+        self.checkboxes = flags
+        self.frequencies = frequencies
+        # Set P6, P7, P8, P9 to always be ON
+        for i in range(6, 10):
+            self.checkboxes[i] = True
+            
+    def set_flags(self, flags):
+        self.checkboxes = flags
+
+        # Set P6, P7, P8, P9 to always be ON
+        for i in range(6, 10):
+            self.checkboxes[i] = True
+        
+    def set_frequencies(self, frequencies):
+        self.frequencies = frequencies
+
+    def send_state(self):
+        try:
+            # Collect state and frequency information
+            state = sum((self.checkboxes[i] << i) for i in range(16) if i not in range(6, 10))
+            frequencies = [self.frequencies[i] if i not in range(6, 10) else "0" for i in range(16)]
+            frequency_string = ",".join(frequencies)
+
+            # Format and send the command
+            command = f"PCF,{state},{frequency_string}\n"
+            self.serial_comm.send_message(command)
+            print(f"PCF8575 state and frequencies updated:\nState: {bin(state)}\nFrequencies: {frequency_string}")
+        except Exception as e:
+            print(f"Failed to send PCF8575 state and frequencies: {e}")
+
+    def reset(self):
+        self.checkboxes = [True for i in range(16)]
+        self.frequencies = ["0" for i in range(16)]
+        self.send_state()
+
+class MFCControl:
+    def __init__(self, serial_comm):
+        self.serial_comm = serial_comm
+        self.blink()
+
+    def blink(self):
+        try:
+            command = "MFC,0\n"
+            self.serial_comm.send_message(command)
+            print("MFC LED blinking...")
+        except Exception as e:
+            print(f"Failed to blink MFC LED: {e}")
+
+    # def set_flow(self):
+    #     try:
+    #         command = f"MFC,1,{','.join([str(rate) for rate in self.flow_rates])}\n"
+    #         self.serial_comm.send_message(command)
+    #         print(f"MFC flow rates updated: {self.flow_rates}")
+    #     except Exception as e:
+    #         print(f"Failed to send MFC flow rates: {e}")
+
 
 class PCF8575Control:
     def __init__(self, parent):
@@ -90,6 +174,7 @@ class PCF8575Control:
             messagebox.showinfo("Success", f"PCF8575 state and frequencies updated:\nState: {bin(state)}\nFrequencies: {frequency_string}")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to send PCF8575 state and frequencies: {e}")
+
 
 # Add the PCF8575 control frame to the GUI
 def create_pcf8575_gui(root, pcf_control):
