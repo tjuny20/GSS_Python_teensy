@@ -70,6 +70,8 @@ class SerialCommunication:
 
     def stream_data(self, duration, save_csv=False, filename="test.csv"):
         try:
+            command = f"MAYA,1\n"
+            self.send_message(command)
             with serial.Serial(self.port, self.baudrate, timeout=1) as ser, open(filename, mode="w", newline="") as file:
                 if save_csv:
                     writer = csv.writer(file)
@@ -85,7 +87,9 @@ class SerialCommunication:
                         yield [timestamp] + list(data)
                 if save_csv:
                     print(f"Data saved successfully to {filename}.")
-                print('Done')
+            command = f"MAYA,0\n"
+            self.send_message(command)
+            print('Done')
         except Exception as e:
             print(f"Error during data recording: {e}")
 
@@ -130,23 +134,27 @@ class PCF8575Control_:
 class MFCControl:
     def __init__(self, serial_comm):
         self.serial_comm = serial_comm
-        self.blink()
+        self.flow_rates = [0 for _ in range(3)]
+        for i, rate in enumerate(self.flow_rates):
+            self.set_flow(i+1, 0.)
 
-    def blink(self):
+    def blink(self, addr):
         try:
-            command = "MFC,0\n"
+            command = f'MFC,{addr},0\n'
             self.serial_comm.send_message(command)
-            print("MFC LED blinking...")
         except Exception as e:
             print(f"Failed to blink MFC LED: {e}")
 
-    # def set_flow(self):
-    #     try:
-    #         command = f"MFC,1,{','.join([str(rate) for rate in self.flow_rates])}\n"
-    #         self.serial_comm.send_message(command)
-    #         print(f"MFC flow rates updated: {self.flow_rates}")
-    #     except Exception as e:
-    #         print(f"Failed to send MFC flow rates: {e}")
+    def set_flow(self, addr, rate):
+        try:
+            # rate_int = int(rate*32000)
+            command = f"MFC,{addr},1,{rate}\n"
+            self.serial_comm.send_message(command)
+            print(f"MFC {addr} flow rate updated: {rate}")
+            self.flow_rates[addr-1] = rate
+            self.blink(addr)
+        except Exception as e:
+            print(f"Failed to send MFC flow rates: {e}")
 
 
 class PCF8575Control:

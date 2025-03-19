@@ -16,7 +16,7 @@ void setup() {
   ctrl.buffer[PACKET_SIZE-1] = 4;
   sens.buffer[PACKET_SIZE-1] = 5;
 
-  readSensTimer.begin(readSensData, 1000000 / DATA_RATE_HZ);  // run every 10000 microseconds
+//   readSensTimer.begin(readSensData, 1000000 / DATA_RATE_HZ);  // run every 10000 microseconds
   Wire.begin();
 
   // Set I2C clock to 400kHz for fast communication. CHECK IF POSSIBLE TO USE 3.4MHz

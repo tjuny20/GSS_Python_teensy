@@ -129,44 +129,67 @@ void parseInput(String input) {
     //Serial.println(newState, BIN);
 
   } else if (input.startsWith("MFC")) {
-      // Skip "MFC," prefix and check the order given
+      // Skip "MFC," prefix
       int firstComma = input.indexOf(',');
       if (firstComma == -1) {
-        Serial.println("Invalid MFC format. Expected: MFC,<order>,*args");
+        Serial.println("Invalid MFC format. Expected: MFC,<addr>,*args");
         return;
       }
-      int order = input.substring(firstComma, firstComma + 1).toInt();
-//       digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-//       modbus.writeSingleHoldingRegister(1, REG_WINK, 0x3100);
+      String mfcStr = input.substring(firstComma + 1);
+      // Extract MFC address
+      int nextComma = mfcStr.indexOf(',');
+      int mfcAddr = mfcStr.substring(0, nextComma).toInt();
+      int currentIndex = nextComma + 1;
+      // Extract MFC command
+      nextComma = mfcStr.indexOf(',', currentIndex);
+      int command = mfcStr.substring(currentIndex, nextComma).toInt();
+      currentIndex = nextComma + 1;
 
-      if (order == 0) {
-      // Toggle onboard LED to indicate running mode
-      digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+      if (command == 0) {
+          // Write a single holding register to the Modbus slave device
+          // SLAVE_ADDRESS - The address of the Modbus slave device to communicate with
+          // REG_WINK      - The starting address of the register to write to
+          // SET_VALUE     - The value to store in the address
+          modbus.writeSingleHoldingRegister(mfcAddr, REG_WINK, 0x3100);
 
-      // Write a single holding register to the Modbus slave device
-      // SLAVE_ADDRESS - The address of the Modbus slave device to communicate with
-      // REG_WINK      - The starting address of the register to write to
-      // SET_VALUE     - The value to store in the address
-      modbus.writeSingleHoldingRegister(1, REG_WINK, 0x3100);
-
-      } else if (order==1) {
-        // Skip "MFC,<order>," prefix and split the input into state and frequency strings
-        int secondComma = input.indexOf(',', firstComma + 1);
-        if (secondComma == -1) {
-          Serial.println("Invalid MFC format. Expected: MFC,<order>,<flow rate>");
-          return;
-        }
-
-        // Extract flow rate
-        int flowRate = input.substring(secondComma).toInt();
-        // Write the flow rate to the Modbus slave device
-        modbus.writeSingleHoldingRegister(1, REG_FSETPOINT, flowRate);
+      } else if (command == 1) {
+          // Skip "MFC,<order>," prefix and split the input into state and frequency strings
+          nextComma = mfcStr.indexOf(',', currentIndex);
+          if (nextComma == -1) {
+            Serial.println("Invalid MFC format. Expected: MFC,<addr>,<command=1>,<flow rate>");
+            return;
+          } else {
+            float flowRate = mfcStr.substring(currentIndex, nextComma).toFloat();
+            uint16_t flowRateInt[2];
+//             modbus.writeSingleHoldingRegister(mfcAddr, REG_SETPOINT, 0x7D00); // Set the flow rate to 32000
+            f_float_2uint(flowRate, flowRateInt[1], flowRateInt[0]);
+            modbus.writeMultipleHoldingRegisters(mfcAddr, REG_FSETPOINT, flowRateInt, 2);
+          }
 
       } else {
-        Serial.println("Invalid MFC order. Expected: 0 (blink) or 1 (set flow rate)");
-        return;
+          Serial.println("Invalid MFC command. Expected: 0 (blink) or 1 (set flow rate)");
+          return;
       }
 
+  } else if (input.startsWith("MAYA")) {
+    // Skip "MAYA," prefix
+    int firstComma = input.indexOf(',');
+    if (firstComma == -1) {
+      Serial.println("Invalid MFC format. Expected: MFC,<addr>,*args");
+      return;
+    }
+    String mayaStr = input.substring(firstComma + 1);
+    // Extract Maya command
+    int nextComma = mayaStr.indexOf(',');
+    int command = mayaStr.substring(0, nextComma).toInt();
+    if (command == 0) {
+      readSensTimer.end();
+    } else if (command == 1) {
+      readSensTimer.begin(readSensData, 1000000 / DATA_RATE_HZ);  // run every 10000 microseconds
+    } else {
+      Serial.println("Invalid MAYA command. Expected: 0 (stream OFF) or 1 (stream ON)");
+      return;
+    }
 
 
   } else {
@@ -188,10 +211,10 @@ void parseInput(String input) {
     DATA_RATE_HZ = frequencyStr.toInt();
 
     // Update the interval based on the new frequency
-    if (DATA_RATE_HZ > 0) {
-      readSensTimer.end();
-      readSensTimer.begin(readSensData, 1000000 / DATA_RATE_HZ);  // microseconds
-    }
+//     if (DATA_RATE_HZ > 0) {
+//       readSensTimer.end();
+//       readSensTimer.begin(readSensData, 1000000 / DATA_RATE_HZ);  // microseconds
+//     }
 
     // Set DAC outputs
     writeMCP4725(MCP4725_1_ADDR, 522 + u16_mV / 1.55);
@@ -532,6 +555,19 @@ float f_2uint_float(uint16_t uint1, uint16_t uint2) {
 
   return f_number.f;
 }
+
+void f_float_2uint(float f, uint16_t &uint1, uint16_t &uint2) {
+  union f_2uint {
+      float f;
+      uint16_t i[2];
+  } f_number;
+
+  f_number.f = f;  // Store the float value into the union
+
+  uint1 = f_number.i[1];  // High 16 bits (Most Significant Word)
+  uint2 = f_number.i[0];  // Low 16 bits (Least Significant Word)
+}
+
 
 // void modbus_setSetpoint(1, 100){
 

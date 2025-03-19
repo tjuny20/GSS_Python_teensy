@@ -11,8 +11,10 @@ uint16_t read_buffer    [2];
 /* --------- Flexiflow Registers --------- */
 // found at: https://www.bronkhorst.com/getmedia/bb0e02ab-2429-4638-b751-7186bd7178fb/917035-Manual-Modbus-slave-interface.pdf
 #define REG_WINK          0x0         // W  - Modbus register - PDU ADDRESS
+#define REG_MEASURE       0x0020      // R  - Modbus register - PDU ADDRESS
 #define REG_FMEASURE      0xA100      // R  - Modbus register - PDU ADDRESS
 #define REG_COUNTER_VAL   0xE808      // RW - Modbus register - PDU ADDRESS
+#define REG_SETPOINT      0x0021      // RW  - Modbus register - PDU ADDRESS
 #define REG_FSETPOINT     0xA118      // RW - Modbus register - PDU ADDRESS
 #define REG_TEMPERATURE   0xA138      // R  - Modbus register - PDU ADDRESS
 
