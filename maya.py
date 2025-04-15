@@ -15,52 +15,98 @@ WAIT_TIME = 3600  # 1 hour in seconds
 TOTAL_HOURS = 5  # Number of hours to record data
 FREQUENCY = 100  # Packets per second
 
-# class maya:
-#     def __init__(self, *args, **kwargs):
-#         self.data = []
-#         self.times = []
-#         self.sensor_data = []
-#         self.serial_comm = SerialCommunication(PORT, BAUDRATE)
-#         self.PCF_flags = [True for i in range(16)]           # All sensors ON
-#         self.PCF_frequencies = ["0" for i in range(16)]      # All sensors at 0Hz
-#         self.dac1_value = 800
-#         self.dac2_value = 200
-#         self.dac_freq = FREQUENCY
+# class SerialCommunication:
+#     def __init__(self, port, baudrate):
+#         self.port = port
+#         self.baudrate = baudrate
 #
-# class params:
-#     def __init__(self):
-#         self.sampling_freq = 10
-#         self.dac1_value = 800
-#         self.dac2_value = 200
-#         self.dac_freq = 10
-#         self.PCF_flags = [True for i in range(16)]          # All sensors ON
-#         self.PCF_frequencies = ["0" for i in range(16)]     # All sensors at 0Hz
+#     def send_message(self, message):
+#         try:
+#             with serial.Serial(self.port, self.baudrate, timeout=1) as ser:
+#                 ser.write(message.encode())
+#                 print(f"Sent to Teensy: {message.strip()}")
+#         except serial.SerialException as e:
+#             messagebox.showerror("Connection Error", f"Could not send data to Teensy: {e}")
+#
+#     def record_data(self, filename, duration):
+#         try:
+#             with serial.Serial(self.port, self.baudrate, timeout=1) as ser, open(filename, mode="w", newline="") as file:
+#                 writer = csv.writer(file)
+#                 writer.writerow(["Timestamp", "Data"])
+#
+#                 start_time = time.time()
+#                 while time.time() - start_time < duration:
+#                     if ser.in_waiting >= PACKET_SIZE:
+#                         data = ser.read(PACKET_SIZE)
+#                         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+#                         writer.writerow([timestamp] + list(data))
+#
+#                 print(f"Data saved successfully to {filename}.")
+#         except Exception as e:
+#             print(f"Error during data recording: {e}")
+#
+#     def stream_data(self, duration, save_csv=False, filename="test.csv"):
+#         try:
+#             command = f"MAYA,1\n"
+#             self.send_message(command)
+#             with serial.Serial(self.port, self.baudrate, timeout=1) as ser, open(filename, mode="w", newline="") as file:
+#                 if save_csv:
+#                     writer = csv.writer(file)
+#                     writer.writerow(["Timestamp", "Data"])
+#                 start_time = time.time()
+#                 print('Streaming data...')
+#                 while time.time() - start_time < duration:
+#                     if ser.in_waiting >= PACKET_SIZE:
+#                         data = ser.read(PACKET_SIZE)
+#                         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+#                         if save_csv:
+#                             writer.writerow([timestamp] + list(data))
+#                         yield [timestamp] + list(data)
+#                 if save_csv:
+#                     print(f"Data saved successfully to {filename}.")
+#             command = f"MAYA,0\n"
+#             self.send_message(command)
+#             print('Done')
+#         except Exception as e:
+#             print(f"Error during data recording: {e}")
 
 
+# NEW VERSION
 class SerialCommunication:
     def __init__(self, port, baudrate):
         self.port = port
         self.baudrate = baudrate
-        self.is_running = False
+
+        try:
+            self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
+            print(f"Connected to {self.port} at {self.baudrate} baud.")
+        except serial.SerialException as e:
+            raise RuntimeError(f"Could not open serial port: {e}")
 
     def send_message(self, message):
         try:
-            with serial.Serial(self.port, self.baudrate, timeout=1) as ser:
-                ser.write(message.encode())
-                print(f"Sent to Teensy: {message.strip()}")
+            self.ser.write(message.encode())
+            print(f"Sent to Teensy: {message.strip()}")
         except serial.SerialException as e:
-            messagebox.showerror("Connection Error", f"Could not send data to Teensy: {e}")
+            print(f"Failed to send message: {e}")
+
+    def read_line(self):
+        try:
+            return self.ser.readline().decode('utf-8').strip()
+        except serial.SerialException as e:
+            print(f"Serial read error: {e}")
+            return ""
 
     def record_data(self, filename, duration):
         try:
-            with serial.Serial(self.port, self.baudrate, timeout=1) as ser, open(filename, mode="w", newline="") as file:
+            with open(filename, mode="w", newline="") as file:
                 writer = csv.writer(file)
                 writer.writerow(["Timestamp", "Data"])
 
                 start_time = time.time()
-                while time.time() - start_time < duration and self.is_running:
-                    if ser.in_waiting >= PACKET_SIZE:
-                        data = ser.read(PACKET_SIZE)
+                while time.time() - start_time < duration:
+                    if self.ser.in_waiting >= PACKET_SIZE:
+                        data = self.ser.read(PACKET_SIZE)
                         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
                         writer.writerow([timestamp] + list(data))
 
@@ -70,28 +116,35 @@ class SerialCommunication:
 
     def stream_data(self, duration, save_csv=False, filename="test.csv"):
         try:
-            command = f"MAYA,1\n"
-            self.send_message(command)
-            with serial.Serial(self.port, self.baudrate, timeout=1) as ser, open(filename, mode="w", newline="") as file:
+            self.send_message("MAYA,1\n")
+            time.sleep(0.01)
+            self.ser.reset_input_buffer()
+
+            with open(filename, mode="w", newline="") as file:
                 if save_csv:
                     writer = csv.writer(file)
                     writer.writerow(["Timestamp", "Data"])
                 start_time = time.time()
                 print('Streaming data...')
-                while time.time() - start_time < duration and self.is_running:
-                    if ser.in_waiting >= PACKET_SIZE:
-                        data = ser.read(PACKET_SIZE)
+                while time.time() - start_time < duration:
+                    if self.ser.in_waiting >= PACKET_SIZE:
+                        data = self.ser.read(PACKET_SIZE)
                         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
                         if save_csv:
                             writer.writerow([timestamp] + list(data))
                         yield [timestamp] + list(data)
                 if save_csv:
                     print(f"Data saved successfully to {filename}.")
-            command = f"MAYA,0\n"
-            self.send_message(command)
+            self.send_message("MAYA,0\n")
             print('Done')
         except Exception as e:
-            print(f"Error during data recording: {e}")
+            print(f"Error during streaming: {e}")
+
+    def close(self):
+        if self.ser and self.ser.is_open:
+            self.ser.close()
+            print("Serial port closed.")
+
 
 class PCF8575Control_:
     def __init__(self, serial_comm, flags=[True for i in range(16)], frequencies=["0" for i in range(16)]):
@@ -131,12 +184,11 @@ class PCF8575Control_:
         self.frequencies = ["0" for i in range(16)]
         self.send_state()
 
+
 class MFCControl:
     def __init__(self, serial_comm):
         self.serial_comm = serial_comm
         self.flow_rates = [0 for _ in range(3)]
-        for i, rate in enumerate(self.flow_rates):
-            self.set_flow(i+1, 0.)
 
     def blink(self, addr):
         try:
@@ -147,14 +199,54 @@ class MFCControl:
 
     def set_flow(self, addr, rate):
         try:
-            # rate_int = int(rate*32000)
-            command = f"MFC,{addr},1,{rate}\n"
+            rate_int = int(rate * 32000)
+            command = f"MFC,{addr},1,{rate_int}\n"
             self.serial_comm.send_message(command)
             print(f"MFC {addr} flow rate updated: {rate}")
-            self.flow_rates[addr-1] = rate
-            self.blink(addr)
+            self.flow_rates[addr - 1] = rate
         except Exception as e:
             print(f"Failed to send MFC flow rates: {e}")
+
+    def setup(self):
+        for i in range(1, 4):
+            try:
+                command = f"MFC,{i},99\n"
+                self.serial_comm.send_message(command)
+                print(f"MFC {i} setup command sent.")
+            except Exception as e:
+                print(f"Failed to setup MFC {i}: {e}")
+
+    def read_registers(self, addr, register, length=1, timeout=2.0):
+        try:
+            # Ensure register is converted to integer if it's in hex string format
+            if isinstance(register, str) and register.startswith("0x"):
+                register = int(register, 16)
+
+            command = f"MFC,{addr},9,{register},{length}\n"
+            self.serial_comm.send_message(command)
+
+            # Temporarily set the serial timeout for reading response
+            prev_timeout = self.serial_comm.ser.timeout
+            self.serial_comm.ser.timeout = timeout
+
+            timer = time.time()
+            while (time.time() - timer < 10.):
+                line = self.serial_comm.readline()
+                if line.startswith("DATA:"):
+                    data_str = line[5:]
+                    values = list(map(int, data_str.split(',')))
+                    if len(values) == length:
+                        self.serial_comm.ser.timeout = prev_timeout  # Restore timeout
+                        return values
+                    else:
+                        raise ValueError(f"Expected {length} values, got {len(values)}: {values}")
+                elif line:
+                    print(f"Ignoring unexpected serial line: {line}")
+
+        except Exception as e:
+            print(f"Failed to read registers from MFC {addr}: {e}")
+            return None
+
 
 
 class PCF8575Control:
@@ -209,94 +301,3 @@ def create_pcf8575_gui(root, pcf_control):
     # Button to send data to Teensy
     sendpcf_button = tk.Button(root, text="Send to PCF8575", command=pcf_control.send_state, bg="cyan", fg="black", font=("Arial", 12))
     sendpcf_button.grid(row=9, column=0, columnspan=2, pady=10)
-
-# Update the main GUI function
-def create_gui():
-    root = tk.Tk()
-    root.title("Sensor data collector")
-
-    # Input fields and labels for DAC control
-    def add_labeled_entry(parent, label_text, default_value, row):
-        tk.Label(parent, text=label_text, font=("Arial", 12)).grid(row=row, column=0, padx=10, pady=10)
-        entry = tk.Entry(parent, font=("Arial", 12))
-        entry.insert(0, default_value)
-        entry.grid(row=row, column=1, padx=10, pady=10)
-        return entry
-
-    dac1_entry = add_labeled_entry(root, "U16-TGS-3830 (mV):", "800", 0)
-    dac2_entry = add_labeled_entry(root, "U25-TGS-3870 (mV):", "200", 1)
-    frequency_entry = add_labeled_entry(root, "Packages / sec:", str(FREQUENCY), 2)
-
-    def send_to_teensy():
-        dac1_value, dac2_value, freq_value = dac1_entry.get(), dac2_entry.get(), frequency_entry.get()
-        if not all(x.isdigit() for x in [dac1_value, dac2_value, freq_value]):
-            messagebox.showerror("Input Error", "Please enter valid numeric values for DACs and frequency.")
-            return
-
-        message = f"{dac1_value},{dac2_value},{freq_value}\n"
-        serial_comm.send_message(message)
-        messagebox.showinfo("Success", f"Values sent to Teensy:\nDAC1: {dac1_value} mV\nDAC2: {dac2_value} mV\nFrequency: {freq_value} Hz")
-
-    send_button = tk.Button(root, text="Send", command=send_to_teensy, bg="green", fg="white", font=("Arial", 12))
-    send_button.grid(row=3, column=0, columnspan=2, pady=10)
-
-    # Parameter input fields
-    duration_entry = add_labeled_entry(root, "Duration (s):", str(DURATION), 4)
-    wait_time_entry = add_labeled_entry(root, "Wait Time (s):", str(WAIT_TIME), 5)
-    total_hours_entry = add_labeled_entry(root, "Total Hours:", str(TOTAL_HOURS), 6)
-
-    def update_parameters():
-        try:
-            global DURATION, WAIT_TIME, TOTAL_HOURS, FREQUENCY
-            DURATION = int(duration_entry.get().strip())
-            WAIT_TIME = int(wait_time_entry.get().strip())
-            TOTAL_HOURS = int(total_hours_entry.get().strip())
-            FREQUENCY = int(frequency_entry.get().strip())
-            messagebox.showinfo("Success", "Parameters updated successfully.")
-        except ValueError:
-            messagebox.showerror("Input Error", "Please enter valid numeric values for all parameters.")
-
-    update_button = tk.Button(root, text="Update Parameters", command=update_parameters, bg="orange", fg="black", font=("Arial", 12))
-    update_button.grid(row=7, column=0, columnspan=2, pady=10)
-
-    # PCF8575 control GUI
-    pcf_control = PCF8575Control(root)
-    create_pcf8575_gui(root, pcf_control)
-
-    # Start and Stop buttons for data recording
-    def start_recording():
-        if serial_comm.is_running:
-            messagebox.showinfo("Already Running", "Data recording is already running.")
-            return
-        serial_comm.is_running = True
-        threading.Thread(target=record_data_thread, daemon=True).start()
-
-    def stop_recording():
-        serial_comm.is_running = False
-
-    start_button = tk.Button(root, text="Start Recording", command=start_recording, bg="blue", fg="white", font=("Arial", 12))
-    start_button.grid(row=10, column=0, columnspan=2, pady=10)
-
-    stop_button = tk.Button(root, text="Stop Recording", command=stop_recording, bg="red", fg="white", font=("Arial", 12))
-    stop_button.grid(row=11, column=0, columnspan=2, pady=10)
-
-    # Exit button
-    exit_button = tk.Button(root, text="Exit", command=root.destroy, bg="gray", fg="white", font=("Arial", 12))
-    exit_button.grid(row=12, column=0, columnspan=2, pady=10)
-
-    root.mainloop()
-
-def record_data_thread():
-    hours_elapsed = 0
-    while serial_comm.is_running and hours_elapsed < TOTAL_HOURS:
-        file_name = datetime.now().strftime("teensy_data_%Y%m%d_%H%M%S.csv")
-        print(f"Starting to save data to {file_name}...")
-        serial_comm.record_data(file_name, DURATION)
-
-        print("Waiting for the next hour to start (55 minutes)...")
-        time.sleep(WAIT_TIME - DURATION)
-        hours_elapsed += 1
-
-if __name__ == "__main__":
-    serial_comm = SerialCommunication(PORT, BAUDRATE)
-    create_gui()

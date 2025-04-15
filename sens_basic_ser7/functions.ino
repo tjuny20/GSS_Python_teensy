@@ -129,6 +129,13 @@ void parseInput(String input) {
     //Serial.println(newState, BIN);
 
   } else if (input.startsWith("MFC")) {
+
+//     Command list
+//      0:  Blink LED
+//      1:  Set flow rate
+//      9:  Read X register
+//      99: Setup Modbus interface
+
       // Skip "MFC," prefix
       int firstComma = input.indexOf(',');
       if (firstComma == -1) {
@@ -150,24 +157,90 @@ void parseInput(String input) {
           // SLAVE_ADDRESS - The address of the Modbus slave device to communicate with
           // REG_WINK      - The starting address of the register to write to
           // SET_VALUE     - The value to store in the address
-          modbus.writeSingleHoldingRegister(mfcAddr, REG_WINK, 0x3100);
-
-      } else if (command == 1) {
-          // Skip "MFC,<order>," prefix and split the input into state and frequency strings
-          nextComma = mfcStr.indexOf(',', currentIndex);
-          if (nextComma == -1) {
-            Serial.println("Invalid MFC format. Expected: MFC,<addr>,<command=1>,<flow rate>");
-            return;
+          uint8_t error = modbus.writeSingleHoldingRegister(mfcAddr, REG_WINK, 0x3100);
+           // Check for success
+          if (error == 0) {
+            // Send data over Serial
+            Serial.print("OKI");
+            Serial.println();  // newline to indicate end of message
           } else {
-            float flowRate = mfcStr.substring(currentIndex, nextComma).toFloat();
-            uint16_t flowRateInt[2];
-//             modbus.writeSingleHoldingRegister(mfcAddr, REG_SETPOINT, 0x7D00); // Set the flow rate to 32000
-            f_float_2uint(flowRate, flowRateInt[1], flowRateInt[0]);
-            modbus.writeMultipleHoldingRegisters(mfcAddr, REG_FSETPOINT, flowRateInt, 2);
+            Serial.print("Modbus error: ");
+            Serial.println(error);
           }
 
+      } else if (command == 1) {
+           uint16_t flowRate = mfcStr.substring(currentIndex).toInt();
+           uint8_t error = modbus.writeSingleHoldingRegister(mfcAddr, REG_SETPOINT, flowRate); // Set the flow rate
+
+           // Check for success
+          if (error == 0) {
+            // Send data over Serial
+            Serial.print("OKI");
+            Serial.println();  // newline to indicate end of message
+          } else {
+            Serial.print("Modbus error: ");
+            Serial.println(error);
+          }
+
+      } else if (command == 9) {
+          // Read a single holding register from the Modbus slave device
+          // REG_READ      - The address of the register to read from
+          // LENGTH        - The number of registers to read
+
+            nextComma = mfcStr.indexOf(',', currentIndex);
+            uint16_t REG_READ = 0;
+            uint16_t LENGTH = 0;
+            uint16_t READ_BUFFER[32];  // max size (or adjust as needed)
+
+          if (nextComma == -1) {
+            Serial.println("Invalid MFC format. Expected: MFC,<addr>,<command=9>,<REG_READ>,<LENGTH>");
+            return;
+          } else {
+            REG_READ = mfcStr.substring(currentIndex, nextComma).toInt();
+            currentIndex = nextComma + 1;
+            nextComma = mfcStr.indexOf(',', currentIndex);
+            LENGTH = mfcStr.substring(currentIndex, nextComma).toInt();
+          }
+          uint8_t error = modbus.readHoldingRegisters(mfcAddr, REG_READ, READ_BUFFER, LENGTH);
+
+          // Check for success
+          if (error == 0) {
+            // Send data over Serial
+            Serial.print("DATA:");
+            for (uint16_t i = 0; i < LENGTH; i++) {
+              Serial.print(READ_BUFFER[i]);
+              if (i < LENGTH - 1) {
+                Serial.print(',');  // comma separator
+              }
+            }
+            Serial.println();  // newline to indicate end of message
+          } else {
+            Serial.print("Modbus error: ");
+            Serial.println(error);
+            Serial.print("mfcAddr: ");
+            Serial.println(mfcAddr);
+            Serial.print("REG_READ: ");
+            Serial.println(REG_READ);
+            Serial.print("READ_BUFFER: ");
+            Serial.println(READ_BUFFER[0]);
+            Serial.print("LENGTH: ");
+            Serial.println(LENGTH);
+          }
+
+
+      } else if (command == 99) {
+          modbus.writeSingleHoldingRegister(mfcAddr, REG_INITRESET, 0x0040);
+          delay(10);
+          modbus.writeSingleHoldingRegister(mfcAddr, REG_FBINTFACE, 0x0000);
+          delay(10);
+          modbus.writeSingleHoldingRegister(mfcAddr, REG_FBSELECT, 0x0001);
+          delay(10);
+          modbus.writeSingleHoldingRegister(mfcAddr, REG_INITRESET, 0x0052);
+          delay(10);
+          modbus.writeSingleHoldingRegister(mfcAddr, REG_WINK, 0x3500);
+
       } else {
-          Serial.println("Invalid MFC command. Expected: 0 (blink) or 1 (set flow rate)");
+          Serial.println("Invalid MFC command. Expected: 0 to 99");
           return;
       }
 
@@ -180,8 +253,7 @@ void parseInput(String input) {
     }
     String mayaStr = input.substring(firstComma + 1);
     // Extract Maya command
-    int nextComma = mayaStr.indexOf(',');
-    int command = mayaStr.substring(0, nextComma).toInt();
+    int command = mayaStr.toInt();
     if (command == 0) {
       readSensTimer.end();
     } else if (command == 1) {

@@ -2,12 +2,12 @@ void setup() {
   
   Serial.begin(115200);  // USB Serial communication
 
-  memset(massflow1.buffer, 0, PACKET_SIZE); //clear massflow1.buffer
-  memset(massflow2.buffer, 0, PACKET_SIZE); //clear massflow2.buffer
-  memset(massflow3.buffer, 0, PACKET_SIZE); //clear massflow3.buffer
-  memset(ctrl.buffer, 0, PACKET_SIZE);             //clear ctrl.buffer
-  memset(c.buffer, 0, PACKET_SIZE);                //clear c.buffer
-  memset(sens.buffer, 0, PACKET_SIZE);             //clear sens.buffer
+  memset(massflow1.buffer, 0, PACKET_SIZE);         //clear massflow1.buffer
+  memset(massflow2.buffer, 0, PACKET_SIZE);         //clear massflow2.buffer
+  memset(massflow3.buffer, 0, PACKET_SIZE);         //clear massflow3.buffer
+  memset(ctrl.buffer, 0, PACKET_SIZE);              //clear ctrl.buffer
+  memset(c.buffer, 0, PACKET_SIZE);                 //clear c.buffer
+  memset(sens.buffer, 0, PACKET_SIZE);              //clear sens.buffer
 
   //add ID to the HID arrays
   massflow1.buffer[PACKET_SIZE-1] = 1;

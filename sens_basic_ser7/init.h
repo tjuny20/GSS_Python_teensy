@@ -17,6 +17,9 @@ uint16_t read_buffer    [2];
 #define REG_SETPOINT      0x0021      // RW  - Modbus register - PDU ADDRESS
 #define REG_FSETPOINT     0xA118      // RW - Modbus register - PDU ADDRESS
 #define REG_TEMPERATURE   0xA138      // R  - Modbus register - PDU ADDRESS
+#define REG_INITRESET     0x000A      // RW  - Modbus register - PDU ADDRESS
+#define REG_FBINTFACE     0x0FA7      // RW  - Modbus register - PDU ADDRESS
+#define REG_FBSELECT      0x0FA8      // RW  - Modbus register - PDU ADDRESS
 
 /* --------- General use variables --------- */
 volatile int mb_prev_millis =    0;      // Save the previous time
