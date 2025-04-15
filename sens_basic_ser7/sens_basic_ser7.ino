@@ -6,7 +6,7 @@ void loop() {
   // Check for incoming commands from the PC
   if (Serial.available()) {
     String input = Serial.readStringUntil('\n');
-    Serial.println(input);
+//     Serial.println(input);
     parseInput(input);
   }
 

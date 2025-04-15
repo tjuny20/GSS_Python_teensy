@@ -158,29 +158,29 @@ void parseInput(String input) {
           // REG_WINK      - The starting address of the register to write to
           // SET_VALUE     - The value to store in the address
           uint8_t error = modbus.writeSingleHoldingRegister(mfcAddr, REG_WINK, 0x3100);
-           // Check for success
-          if (error == 0) {
-            // Send data over Serial
-            Serial.print("OKI");
-            Serial.println();  // newline to indicate end of message
-          } else {
-            Serial.print("Modbus error: ");
-            Serial.println(error);
-          }
+//            // Check for success
+//           if (error == 0) {
+//             // Send data over Serial
+//             Serial.print("OKI");
+//             Serial.println();  // newline to indicate end of message
+//           } else {
+//             Serial.print("Modbus error: ");
+//             Serial.println(error);
+//           }
 
       } else if (command == 1) {
            uint16_t flowRate = mfcStr.substring(currentIndex).toInt();
            uint8_t error = modbus.writeSingleHoldingRegister(mfcAddr, REG_SETPOINT, flowRate); // Set the flow rate
 
-           // Check for success
-          if (error == 0) {
-            // Send data over Serial
-            Serial.print("OKI");
-            Serial.println();  // newline to indicate end of message
-          } else {
-            Serial.print("Modbus error: ");
-            Serial.println(error);
-          }
+//            // Check for success
+//           if (error == 0) {
+//             // Send data over Serial
+//             Serial.print("OKI");
+//             Serial.println();  // newline to indicate end of message
+//           } else {
+//             Serial.print("Modbus error: ");
+//             Serial.println(error);
+//           }
 
       } else if (command == 9) {
           // Read a single holding register from the Modbus slave device
