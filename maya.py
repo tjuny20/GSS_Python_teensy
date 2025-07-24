@@ -3,6 +3,7 @@ import threading
 import csv
 import time
 from datetime import datetime
+import os
 
 # Serial port configuration
 PORT = "/dev/ttyACM0"  # Replace with your Teensy's serial port
@@ -47,10 +48,15 @@ class SerialCommunication:
         try:
             command = f"MAYA,1\n"
             self.send_message(command)
-            with serial.Serial(self.port, self.baudrate, timeout=1) as ser, open(filename, mode="w", newline="") as file:
+            file_exists = os.path.isfile(filename)
+            with serial.Serial(self.port, self.baudrate, timeout=1) as ser, open(filename, mode="a", newline="") as file:
                 if save_csv:
                     writer = csv.writer(file)
-                    writer.writerow(["Timestamp", "Data"])
+                    if not file_exists or os.path.getsize(filename) == 0:
+                        writer.writerow(["Timestamp", "Data"])
+                        print(f"Created and started writing to {filename}.")
+                    else:
+                        print(f"Appending data to existing file {filename}.")
                 start_time = time.time()
                 print('Streaming data...')
                 while time.time() - start_time < duration:
@@ -60,8 +66,6 @@ class SerialCommunication:
                         if save_csv:
                             writer.writerow([timestamp] + list(data))
                         yield [timestamp] + list(data)
-                if save_csv:
-                    print(f"Data saved successfully to {filename}.")
             command = f"MAYA,0\n"
             self.send_message(command)
             print('Done')
