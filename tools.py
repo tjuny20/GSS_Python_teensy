@@ -479,3 +479,41 @@ def adap_whitening_2(X, lr_g=0.001, lr_w=0.00001, alpha=1., K_constrained=False)
     Z = torch.vstack(Z)
 
     return Y, Z, g_stack, W_stack
+
+
+def load(filename, reduced=True):
+    sensor_data = []
+    times = []
+    responding_sens = [0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0]
+    with open(filename, 'r') as f:
+        reader = csv.reader(f)
+        # times = [row[0] for row in reader]
+        for row in reader:
+            if row[0] =='Timestamp':
+                continue
+            else:
+                times.append(row[0])
+                values = []
+                for i in range(17):
+                    b1 = int(row[2*i+1])
+                    b2 = int(row[2*i+2])
+                    values.append(int.from_bytes([b1, b2], byteorder="little"))
+                sensor_data.append(values)
+    sensor_data = np.array(sensor_data)
+    if reduced:
+        sensor_data = np.delete(sensor_data, np.where(np.array(responding_sens)==0)[0], axis=1)
+    sequence = pickle.load(open('data/1_300_20_sequence.pkl', 'rb'))
+    # Convert to seconds
+    times_sec = []
+    for dt_str in times:
+        dt = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S.%f')
+        seconds = dt.hour * 3600 + dt.minute * 60 + dt.second + dt.microsecond / 1e6
+        times_sec.append(seconds)
+    sequence_sec = []
+    for dt_str in sequence:
+        dt = datetime.strptime(dt_str[0], '%a %b %d %H:%M:%S %Y')
+        seconds = dt.hour * 3600 + dt.minute * 60 + dt.second
+        sequence_sec.append(seconds)
+    times_sec = np.array(times_sec)
+    sequence_sec = np.array(sequence_sec)
+    return sensor_data, sequence, times_sec, sequence_sec
