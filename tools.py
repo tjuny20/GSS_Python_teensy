@@ -6,6 +6,9 @@ import matplotlib.pyplot as plt
 from collections import namedtuple
 from sklearn.decomposition import PCA
 from torch.linalg import inv, eig, pinv
+from scipy.ndimage import gaussian_filter1d
+import csv, pickle
+from datetime import datetime
 
 
 class SurrGradSpike(torch.autograd.Function):
@@ -517,3 +520,331 @@ def load(filename, reduced=True):
     times_sec = np.array(times_sec)
     sequence_sec = np.array(sequence_sec)
     return sensor_data, sequence, times_sec, sequence_sec
+
+def load(filename, reduced=True):
+    sensor_data = []
+    times = []
+    responding_sens = [0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0]
+    with open(f'data/{filename}.csv', 'r') as f:
+        reader = csv.reader(f)
+        # times = [row[0] for row in reader]
+        for row in reader:
+            if row[0] =='Timestamp':
+                continue
+            else:
+                times.append(row[0])
+                values = []
+                for i in range(17):
+                    b1 = int(row[2*i+1])
+                    b2 = int(row[2*i+2])
+                    values.append(int.from_bytes([b1, b2], byteorder="little"))
+                sensor_data.append(values)
+    sensor_data = np.array(sensor_data)
+    if reduced:
+        sensor_data = np.delete(sensor_data, np.where(np.array(responding_sens)==0)[0], axis=1)
+    sequence = pickle.load(open(f'data/{filename}_sequence.pkl', 'rb'))
+    # Convert to seconds
+    times_sec = []
+    for dt_str in times:
+        dt = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S.%f')
+        seconds = dt.hour * 3600 + dt.minute * 60 + dt.second + dt.microsecond / 1e6
+        times_sec.append(seconds)
+    sequence_sec = []
+    for dt_str in sequence:
+        dt = datetime.strptime(dt_str[0], '%a %b %d %H:%M:%S %Y')
+        seconds = dt.hour * 3600 + dt.minute * 60 + dt.second
+        sequence_sec.append(seconds)
+    times_sec = np.array(times_sec)
+    sequence_sec = np.array(sequence_sec)
+    return sensor_data, sequence, times_sec, sequence_sec
+
+def split(data, delay = 1.5, t_baseline = 300, n_train = 225):
+
+    sensor_data = data[0]
+    times_sec = data[1]
+    sequence_sec = data[2]
+    baseline = np.mean(sensor_data[:t_baseline], axis=0)    # Add baseline substraction
+    X_train = []
+    Y_train = []
+    X_test = []
+    Y_test = []
+    counts = np.zeros((3))
+
+    for i, t in enumerate(sequence_sec):
+        try:
+            flags = (times_sec > sequence_sec[i]) & (times_sec < sequence_sec[i+1] + delay)
+        except IndexError:
+            flags = (times_sec > sequence_sec[i])
+        sample = sensor_data[flags][:18]
+
+        if counts[sequence[i][1]-1] < n_train//3:
+            X_train.append(sample.flatten())
+            Y_train.append(sequence[i][1]-1)
+            counts[sequence[i][1]-1] += 1
+        else:
+            X_test.append(sample.flatten())
+            Y_test.append(sequence[i][1]-1)
+
+    X_train = np.array(X_train)
+    Y_train = np.array(Y_train)
+    X_test = np.array(X_test)
+    Y_test = np.array(Y_test)
+    return X_train, Y_train, X_test, Y_test
+
+def estimate_derivative(signal, dt=1):
+    """
+    Estimate the first derivative of a signal using second-order central difference.
+
+    Parameters:
+        signal (np.ndarray): 1D array of signal values.
+        dt (float): Sampling interval (time step).
+
+    Returns:
+        np.ndarray: Estimated first derivative of the signal.
+    """
+    n = len(signal)
+    derivative = np.zeros_like(signal)
+
+    # Central differences for interior points
+    for i in range(1, n - 1):
+        derivative[i] = (signal[i + 1] - signal[i - 1]) / (2 * dt)
+
+    # Forward difference for the first point
+    derivative[0] = (signal[1] - signal[0]) / dt
+
+    # Backward difference for the last point
+    derivative[-1] = (signal[-1] - signal[-2]) / dt
+
+    return derivative
+
+def find_blocks(arr: np.ndarray, max_len: int = None):
+    change_points = np.where(arr[1:] != arr[:-1])[0] + 1
+    starts = np.r_[0, change_points]
+    ends = np.r_[change_points - 1, len(arr) - 1]
+
+    blocks = []
+    for s, e in zip(starts, ends):
+        val = int(arr[s])
+        length = e - s + 1
+        if max_len is None or length <= max_len:
+            blocks.append([int(s), int(e), val])
+        else:
+            for i in range(s, e + 1, max_len):
+                j = min(i + max_len - 1, e)
+                blocks.append([int(i), int(j), val])
+    return blocks
+
+
+def plot_two_intervals(i0, i1, j0, j1,
+                       times_sec, sequence_sec, sequence, z_out,
+                       max_len=20, sigma=2, savepath='figs/hd_out.pdf'):
+    """
+    Pretty plotting of z_out activity + block coloring for two index intervals.
+    """
+
+    # Global style
+    plt.rcParams.update({
+        "font.size": 12,
+        "axes.labelsize": 12,
+        "axes.titlesize": 12,
+        "legend.fontsize": 10
+    })
+
+    cm = plt.get_cmap('tab10')
+    trace_colors = plt.cm.Set2.colors  # softer palette for neurons
+
+    # Build colour array
+    colour = np.zeros_like(times_sec)
+    for i, t in enumerate(sequence_sec):
+        try:
+            flag = (times_sec > sequence_sec[i]) & (times_sec < sequence_sec[i+1])
+        except IndexError:
+            flag = (times_sec > sequence_sec[i])
+        colour[flag] = int(sequence[i][1])
+
+    # Convert index pairs (i0,i1), (j0,j1) into time indices
+    intervals = []
+    for a, b in [(i0, i1), (j0, j1)]:
+        t0_sec = sequence_sec[a]
+        t1_sec = sequence_sec[b]
+        t0 = np.abs(times_sec - t0_sec).argmin()
+        t1 = np.abs(times_sec - t1_sec).argmin()
+        intervals.append((t0, t1))
+
+    # Make figure with two subplots
+    fig, ax = plt.subplots(2, 1, figsize=(10, 6),
+                           sharey=True,
+                           gridspec_kw={'hspace': 0.35})
+
+    for k, (t0, t1) in enumerate(intervals):
+        blocks = find_blocks(colour[t0:t1], max_len=max_len)
+
+        # Plot z_out traces
+        for i in range(z_out.shape[1]):
+            smoothed = gaussian_filter1d(z_out[t0:t1, i], sigma=sigma)
+            ax[k].plot(smoothed,
+                       label=f'Neuron {i+1}',
+                       color=cm(i),
+                       lw=1.5, alpha=0.85)
+
+        # Highlight blocks as light shaded regions
+        for block in blocks:
+            ax[k].axvspan(block[0], block[1],
+                          facecolor=cm(block[2]-1), alpha=0.15)
+
+        # Formatting
+        ax[k].spines[['top', 'right']].set_visible(False)
+        ax[k].set_xlim([0, t1 - t0])
+        ax[k].set_ylim([0., 1.])
+
+        # Titles and labels
+        titles = ['Train', 'Test']
+        ax[k].text(0.99, 1.06, f"{titles[k]}",
+           transform=ax[k].transAxes,
+           rotation=0, va="center", ha="right",
+           fontsize=16,
+                   )
+        if k == 1:
+            ax[k].set_xlabel("# samples")
+        elif k==0:
+            ax[k].set_xticklabels([])
+        ax[k].set_ylabel("Activity (a.u.)")
+        ax[k].set_yticks([0,1])
+
+    # Single legend at bottom
+    handles, labels = ax[0].get_legend_handles_labels()
+    fig.legend(handles, labels,
+               frameon=False,
+               loc="center left",
+               bbox_to_anchor=(0.95, 0.83),  # just outside the right side
+               ncol=1)
+
+    # plt.tight_layout(rect=[0, 0.05, 1, 1])
+    plt.savefig(savepath, bbox_inches='tight')
+    return fig, ax
+
+def train(sensor_data, sequence, times_sec, sequence_sec,
+          n_hd=10000, n_out=3, k=10, n_pot=12., w_teacher=1., t_training_delay=2.,
+          normalized=False, whitened=False, uniformW=False,):
+
+    if normalized:
+        sensor_data_norm = (sensor_data - np.mean(sensor_data, axis=0))/ np.std(sensor_data, axis=0)
+    else:
+        sensor_data_norm = sensor_data
+    if whitened:
+        x_dense = adap_whitening_2(sensor_data_norm)
+    else:
+        x_dense = sensor_data_norm
+
+    n_dense = x_dense.shape[1]
+
+    labels = np.zeros_like(times_sec)
+    for i, t in enumerate(sequence_sec):
+        try:
+            flag = (times_sec > sequence_sec[i] + t_training_delay) & (times_sec < sequence_sec[i+1])
+        except IndexError:
+            flag = (times_sec > sequence_sec[i] + t_training_delay)
+        labels[flag] = int(sequence[i][1])
+
+    if uniformW:
+        W_hd = np.random.uniform(high=1/np.sqrt(n_dense), size=(n_hd, n_dense))  #Test random sparse weights
+    else:
+        W_hd = np.random.binomial(n=1, p=0.05, size=(n_hd, n_dense))  #Test random sparse weights
+
+    x_hd = x_dense @ W_hd.T
+    z_hd = np.where(np.argsort(x_hd)<k, 1., 0)
+    W_out = np.zeros((n_out, n_hd))
+    W = np.zeros((n_out, n_hd))
+    z_out_train = np.zeros((z_hd.shape[0],  n_out))
+
+    for i, row in enumerate(z_hd):
+        teacher = np.zeros((n_out,))
+        if labels[i] != 0:
+            teacher[int(labels[i]-1)] = w_teacher
+        out = row @ W_out.T + teacher
+        z_out_train[i] = out
+        dW = (1./n_pot)*(np.atleast_2d(out).T @ np.atleast_2d(row))
+        W += dW
+        W_out = np.where(W>=1., 1./k, 0.)
+
+    return W_hd, W_out
+
+def test(sensor_data, sequence, times_sec, sequence_sec,
+         W_hd, W_out,
+         n_hd=10000, n_out=3, k=10, integration_delay=0.,
+         normalized=False, whitened=False):
+
+    if normalized:
+        sensor_data_norm = (sensor_data - np.mean(sensor_data, axis=0))/ np.std(sensor_data, axis=0)
+    else:
+        sensor_data_norm = sensor_data
+    if whitened:
+        x_dense = adap_whitening_2(sensor_data_norm)
+    else:
+        x_dense = sensor_data_norm
+
+    x_hd = x_dense @ W_hd.T
+    z_hd = np.where(np.argsort(x_hd)<k, 1., 0)
+    z_out = np.zeros((z_hd.shape[0],  n_out))
+    for i, row in enumerate(z_hd):
+        out = row @ W_out.T
+        z_out[i] = out
+
+    z_pred = np.zeros_like(sequence_sec)
+    z_true = np.zeros_like(sequence_sec)
+    for i, t in enumerate(sequence_sec):
+        try:
+            flag = (times_sec > sequence_sec[i] + integration_delay) & (times_sec < sequence_sec[i+1])
+        except IndexError:
+            flag = (times_sec > sequence_sec[i] + integration_delay)
+        z_pred[i] = np.argsort(np.sum(z_out[flag], axis=0))[-1] + 1
+        z_true[i] = sequence[i][1]
+    test_acc = metrics.accuracy_score(z_true, z_pred)
+
+    return test_acc
+
+def split(sensor_data, sequence, times_sec, sequence_sec, idx_split=450):
+
+    labels = np.zeros_like(times_sec)
+    for i, t in enumerate(sequence_sec[:idx_split]):
+        try:
+            flag = (times_sec > sequence_sec[i]) & (times_sec < sequence_sec[i+1])
+        except IndexError:
+            flag = (times_sec > sequence_sec[i])
+        labels[flag] = int(sequence[i][1])
+
+    idx_last_flag = np.where(labels != 0)[0][-1]
+
+    return sensor_data[:idx_last_flag], sequence[:idx_split], times_sec[:idx_last_flag], sequence_sec[:idx_split], \
+           sensor_data[idx_last_flag:], sequence[idx_split:], times_sec[idx_last_flag:], sequence_sec[idx_split:]
+
+def get_samples(sensor_data, sequence, times_sec, sequence_sec,
+                idx_split=450):
+    X_train = []
+    Y_train = []
+    X_test = []
+    Y_test = []
+    count = 0
+
+    for i, t in enumerate(sequence_sec):
+        try:
+            flags = (times_sec > sequence_sec[i] + t_training_delay) & (times_sec < sequence_sec[i+1])
+        except IndexError:
+            flags = (times_sec > sequence_sec[i] + t_training_delay)
+        sample = sensor_data[flags]
+        t_sample = times_sec[flags]
+
+        if count<idx_split:
+            X_train.append(sample.flatten())
+            Y_train.append(sequence[i][1]-1)
+            count += 1
+        else:
+            X_test.append(sample.flatten())
+            Y_test.append(sequence[i][1]-1)
+
+    X_train = np.array(X_train)
+    Y_train = np.array(Y_train)
+    X_test = np.array(X_test)
+    Y_test = np.array(Y_test)
+
+    return X_train, Y_train, X_test, Y_test
