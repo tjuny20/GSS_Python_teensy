@@ -1,75 +1,108 @@
 import numpy as np
-from tools import load, split, estimate_derivative, train, test
+from sklearn import metrics
 import pickle
+from tools import load, estimate_derivative
+from matplotlib import font_manager as fm, rcParams
 
+
+path = r"/home/p308270/.local/share/fonts/Helvetica.ttf"  # or .otf
+fm.fontManager.addfont(path)
+rcParams["font.family"] = fm.FontProperties(fname=path).get_name()
+
+rng = np.random.default_rng(42)  # for reproducibility
 
 n_hd = 10000
 n_out = 3
-k = 50
-n_pot = 10.
-w_teacher = 1.
-t_training_delay = 0.
-n_training = [3, 9, 15, 30]
+n_train = 225
+filename = '1_600_20'
+
+grid_k = np.arange(10,50,5)
+grid_p = np.arange(1,10,1)
+
+grid_n_fold = 10
+
+sensor_data, sequence, times_sec, sequence_sec = load(filename, reduced=True)
+d_sensor_data = np.apply_along_axis(estimate_derivative, axis=0, arr=sensor_data)
+sensor_data = np.hstack((sensor_data, d_sensor_data))
+
+# baseline = np.mean(sensor_data[:300], axis=0)  # Add baseline substraction
+# sensor_data = (sensor_data - baseline)
+
+params = {'k': [], 'p': [], 'n_fold': []}
+results = {'train_acc': [], 'test_acc': [], 'y_pred': [], 'y_true': []}
+
+for k in grid_k:
+    for p in grid_p:
+        for n_fold in range(grid_n_fold):
+            for key in params.keys():
+                params[key].append(locals()[key])
+
+            x_dense = sensor_data
+            n_dense = x_dense.shape[1]
+
+            labels = np.zeros_like(times_sec)
+            for i, t in enumerate(sequence_sec[:n_train]):
+                try:
+                    flag = (times_sec > sequence_sec[i]) & (times_sec < sequence_sec[i+1])
+                except IndexError:
+                    flag = (times_sec > sequence_sec[i])
+                labels[flag] = int(sequence[i][1])
+
+            idx_last_flag = np.where(labels != 0)[0][-1]
+
+            W_hd = np.random.binomial(n=1, p=0.05, size=(n_hd, n_dense))  #Test random sparse weights
+            x_hd = x_dense @ W_hd.T
+            z_hd = np.where(np.argsort(x_hd)<k, 1., 0)
+            W_out = np.zeros((n_out, n_hd))
+            W = np.zeros((n_out, n_hd))
+
+            z_out_train = np.zeros((z_hd.shape[0],  n_out))
+            for i, row in enumerate(z_hd[:idx_last_flag]):
+                if labels[i] != 0:
+                    active_idx = np.flatnonzero(row)
+                    to_flip = active_idx[rng.random(active_idx.size) < p]     # Bernoulli(p) per active index# indices where z_hd==1
+                    W_out[int(labels[i])-1, to_flip] = 1./k
 
 
-for n in n_training:
-    file = f'1_{n}_20'
-    
-    grid_k = [10, 15, 20, 25]
-    grid_n_pot = [n for n in np.arange(0.5, 5.5, 0.5)]
-    grid_t_training_delay = [n for n in range(0, 20, 5)]
-    grid_n_fold = 5
+                out = row @ W_out.T
+                z_out_train[i] = out
 
+            z_out_acc = np.zeros((z_hd.shape[0],  n_out))
+            for i, row in enumerate(z_hd):
+                out = row @ W_out.T
+                z_out_acc[i] = out
 
-    params = {'k': [], 'n_pot': [], 't_training_delay': [], 'n_fold': []}
-    results = {'train_acc': [], 'test_acc': []}
+            z_wta = np.where(np.argsort(z_out_acc, axis=1)<1, 1., 0)
 
-    for k in grid_k:
-        for n_pot in grid_n_pot:
-            for t_training_delay in grid_t_training_delay:
-                for n_fold in range(grid_n_fold):
+            z_pred = np.zeros_like(sequence_sec)
+            z_true = np.zeros_like(sequence_sec)
+            for i, t in enumerate(sequence_sec):
+                try:
+                    flag = (times_sec > sequence_sec[i]) & (times_sec < sequence_sec[i+1])
+                except IndexError:
+                    flag = (times_sec > sequence_sec[i])
+                z_pred[i] = np.argsort(np.sum(z_out_acc[flag], axis=0))[-1] + 1
+                z_true[i] = sequence[i][1]
 
-                    for key in params.keys():
-                        params[key].append(locals()[key])
+            train_acc = metrics.accuracy_score(z_true[:n_train], z_pred[:n_train])
+            test_acc = metrics.accuracy_score(z_true[n_train:], z_pred[n_train:])
+            results['train_acc'].append(train_acc)
+            results['test_acc'].append(test_acc)
+            results['y_pred'].append(z_pred.copy())
+            results['y_true'].append(z_true.copy())
 
-                    train_data, train_sequence, train_times_sec, train_sequence_sec = load(file, reduced=True)
-                    train_d_sensor_data = np.apply_along_axis(estimate_derivative, axis=0, arr=train_data)
-                    train_data = np.hstack((train_data, train_d_sensor_data))
+            print(f'k: {k}, p: {p}, n_fold: {n_fold}')
+            print(f'Train accuracy: {train_acc:.4f}, Test accuracy: {test_acc:.4f}')
 
-                    data, sequence, times_sec, sequence_sec = load('1_600_20', reduced=True)
-                    d_sensor_data = np.apply_along_axis(estimate_derivative, axis=0, arr=data)
-                    data_ = np.hstack((data, d_sensor_data))
-                    _, _, _, _, \
-                        test_data, test_sequence, test_times_sec, test_sequence_sec = split(data_, sequence, times_sec,
-                                                                                            sequence_sec, idx_split=450)
+for key in params.keys():
+    params[key] = np.array(params[key])
+for k in ['train_acc', 'test_acc']:
+    results[k] = np.array(results[k])
+# keep y_pred / y_true as lists-of-arrays (ragged OK) or cast to object arrays:
+results['y_pred'] = np.array(results['y_pred'], dtype=object)
+results['y_true'] = np.array(results['y_true'], dtype=object)
 
-                    W_hd, W_out = train(train_data, train_sequence, train_times_sec, train_sequence_sec,
-                                        n_hd=n_hd, n_out=n_out, k=k, n_pot=n_pot, w_teacher=w_teacher,
-                                        t_training_delay=t_training_delay,
-                                        normalized=False, whitened=False, uniformW=False)
+data = {'params': params, 'results': results}
 
-                    train_acc = test(train_data, train_sequence, train_times_sec, train_sequence_sec,
-                                     W_hd, W_out,
-                                     n_hd=n_hd, n_out=n_out, k=k, integration_delay=0.,
-                                     normalized=False, whitened=False)
-
-                    test_acc = test(test_data, test_sequence, test_times_sec, test_sequence_sec,
-                                    W_hd, W_out,
-                                    n_hd=n_hd, n_out=n_out, k=k, integration_delay=0.,
-                                    normalized=False, whitened=False)
-
-                    results['train_acc'].append(train_acc)
-                    results['test_acc'].append(test_acc)
-
-                    print(f'k: {k}, n_pot: {n_pot}, t_training_delay: {t_training_delay}, n_fold: {n_fold}')
-                    print(f'Train accuracy: {train_acc:.4f}, Test accuracy: {test_acc:.4f}\n')
-
-    for key in params.keys():
-        params[key] = np.array(params[key])
-    for key in results.keys():
-        results[key] = np.array(results[key])
-
-    data = {'params': params, 'results': results}
-
-    with open(f'data/gridsearch_{n}.pkl', 'wb') as f:
-        pickle.dump(data, f)
+with open('data/gridsearch_stochastic.pkl', 'wb') as f:
+    pickle.dump(data, f)

@@ -848,3 +848,36 @@ def get_samples(sensor_data, sequence, times_sec, sequence_sec,
     Y_test = np.array(Y_test)
 
     return X_train, Y_train, X_test, Y_test
+
+def find_blocks(labels, max_len=20, ignore=0):
+    """
+    Split a 1D array of integer labels into contiguous blocks.
+    - Blocks with label == `ignore` (default 0) are skipped.
+    - Long runs are split into chunks of at most `max_len`.
+    Returns: list of (start_idx, end_idx, label) with end_idx exclusive.
+    """
+    labels = np.asarray(labels)
+    n = len(labels)
+    if n == 0:
+        return []
+
+    blocks = []
+    start = 0
+    prev = labels[0]
+
+    # walk + flush on change (and once at the end)
+    for i in range(1, n + 1):
+        cur = labels[i] if i < n else None
+        if cur != prev:
+            if prev != ignore:
+                run_start, run_end, lab = start, i, int(prev)
+                # chunk the run to respect max_len
+                s = run_start
+                while s < run_end:
+                    e = min(s + max_len, run_end)
+                    blocks.append((s, e, lab))
+                    s = e
+            start = i
+            prev = cur
+
+    return blocks
