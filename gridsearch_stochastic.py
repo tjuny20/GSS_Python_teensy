@@ -5,10 +5,6 @@ from tools import load, estimate_derivative
 from matplotlib import font_manager as fm, rcParams
 
 
-path = r"/home/p308270/.local/share/fonts/Helvetica.ttf"  # or .otf
-fm.fontManager.addfont(path)
-rcParams["font.family"] = fm.FontProperties(fname=path).get_name()
-
 rng = np.random.default_rng(42)  # for reproducibility
 
 n_hd = 10000
@@ -16,8 +12,8 @@ n_out = 3
 n_train = 225
 filename = '1_600_20'
 
-grid_k = np.arange(10,50,5)
-grid_p = np.arange(1,10,1)
+grid_k = np.arange(1,21,1)
+grid_p = np.arange(1,11,1)
 
 grid_n_fold = 10
 
@@ -60,7 +56,7 @@ for k in grid_k:
             for i, row in enumerate(z_hd[:idx_last_flag]):
                 if labels[i] != 0:
                     active_idx = np.flatnonzero(row)
-                    to_flip = active_idx[rng.random(active_idx.size) < p]     # Bernoulli(p) per active index# indices where z_hd==1
+                    to_flip = active_idx[rng.random(active_idx.size) < 1/p]     # Bernoulli(p) per active index# indices where z_hd==1
                     W_out[int(labels[i])-1, to_flip] = 1./k
 
 
@@ -104,5 +100,5 @@ results['y_true'] = np.array(results['y_true'], dtype=object)
 
 data = {'params': params, 'results': results}
 
-with open('data/gridsearch_stochastic.pkl', 'wb') as f:
+with open('data/gridsearch_stochastic_2.pkl', 'wb') as f:
     pickle.dump(data, f)
