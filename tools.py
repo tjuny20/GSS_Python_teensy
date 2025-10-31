@@ -558,7 +558,7 @@ def load(filename, reduced=True):
     sequence_sec = np.array(sequence_sec)
     return sensor_data, sequence, times_sec, sequence_sec
 
-def split(data, delay = 1.5, t_baseline = 300, n_train = 225):
+def split(data, delay = 1.5, t_baseline = 300, n_train = 225, n_frames=None):
 
     sensor_data = data[0]
     times_sec = data[1]
@@ -582,7 +582,10 @@ def split(data, delay = 1.5, t_baseline = 300, n_train = 225):
             Y_train.append(sequence[i][1]-1)
             counts[sequence[i][1]-1] += 1
         else:
-            X_test.append(sample.flatten())
+            if n_frames is not None:
+                X_test.append(sample[:n_frames].flatten())
+            else:
+                X_test.append(sample.flatten())
             Y_test.append(sequence[i][1]-1)
 
     X_train = np.array(X_train)
@@ -614,6 +617,29 @@ def estimate_derivative(signal, dt=1):
 
     # Backward difference for the last point
     derivative[-1] = (signal[-1] - signal[-2]) / dt
+
+    return derivative
+
+def pseudoderivative(signal, dt=1):
+    """
+    Estimate the first derivative of a signal using first-order backward difference.
+
+    Parameters:
+        signal (np.ndarray): 1D array of signal values.
+        dt (float): Sampling interval (time step).
+
+    Returns:
+        np.ndarray: Estimated first derivative of the signal.
+    """
+    n = len(signal)
+    derivative = np.zeros_like(signal)
+
+    # Backward difference
+    for i in range(1, n):
+        derivative[i] = (signal[i] - signal[i-1]) / dt
+
+    # Zero difference for the first point
+    derivative[0] = 0.
 
     return derivative
 
@@ -724,9 +750,10 @@ def plot_two_intervals(i0, i1, j0, j1,
     return fig, ax
 
 def train(sensor_data, sequence, times_sec, sequence_sec,
-          n_hd=10000, n_out=3, k=10, n_pot=12., w_teacher=1., t_training_delay=2.,
-          normalized=False, whitened=False, uniformW=False,):
+          n_hd=10000, n_out=3, k=10, p=0.5, w_teacher=1.,
+          normalized=False, whitened=False, rng_seed=42):
 
+    rng = np.random.default_rng(rng_seed)  # for reproducibility
     if normalized:
         sensor_data_norm = (sensor_data - np.mean(sensor_data, axis=0))/ np.std(sensor_data, axis=0)
     else:
@@ -741,31 +768,24 @@ def train(sensor_data, sequence, times_sec, sequence_sec,
     labels = np.zeros_like(times_sec)
     for i, t in enumerate(sequence_sec):
         try:
-            flag = (times_sec > sequence_sec[i] + t_training_delay) & (times_sec < sequence_sec[i+1])
+            flag = (times_sec > sequence_sec[i]) & (times_sec < sequence_sec[i+1])
         except IndexError:
-            flag = (times_sec > sequence_sec[i] + t_training_delay)
+            flag = (times_sec > sequence_sec[i])
         labels[flag] = int(sequence[i][1])
 
-    if uniformW:
-        W_hd = np.random.uniform(high=1/np.sqrt(n_dense), size=(n_hd, n_dense))  #Test random sparse weights
-    else:
-        W_hd = np.random.binomial(n=1, p=0.05, size=(n_hd, n_dense))  #Test random sparse weights
 
+    W_hd = np.random.binomial(n=1, p=0.05, size=(n_hd, n_dense))  #Test random sparse weights
     x_hd = x_dense @ W_hd.T
     z_hd = np.where(np.argsort(x_hd)<k, 1., 0)
     W_out = np.zeros((n_out, n_hd))
     W = np.zeros((n_out, n_hd))
-    z_out_train = np.zeros((z_hd.shape[0],  n_out))
 
     for i, row in enumerate(z_hd):
-        teacher = np.zeros((n_out,))
         if labels[i] != 0:
-            teacher[int(labels[i]-1)] = w_teacher
-        out = row @ W_out.T + teacher
-        z_out_train[i] = out
-        dW = (1./n_pot)*(np.atleast_2d(out).T @ np.atleast_2d(row))
-        W += dW
-        W_out = np.where(W>=1., 1./k, 0.)
+            active_idx = np.flatnonzero(row)
+            to_flip = active_idx[rng.random(active_idx.size) < p]  # Bernoulli(p) per active index# indices where z_hd==1
+            W_out[int(labels[i]) - 1, to_flip] = 1. / k
+        out = row @ W_out.T
 
     return W_hd, W_out
 
@@ -819,7 +839,7 @@ def split(sensor_data, sequence, times_sec, sequence_sec, idx_split=450):
            sensor_data[idx_last_flag:], sequence[idx_split:], times_sec[idx_last_flag:], sequence_sec[idx_split:]
 
 def get_samples(sensor_data, sequence, times_sec, sequence_sec,
-                idx_split=450):
+                idx_split_0=0, idx_split=450, t_training_delay=0., n_frames=None):
     X_train = []
     Y_train = []
     X_test = []
@@ -831,16 +851,23 @@ def get_samples(sensor_data, sequence, times_sec, sequence_sec,
             flags = (times_sec > sequence_sec[i] + t_training_delay) & (times_sec < sequence_sec[i+1])
         except IndexError:
             flags = (times_sec > sequence_sec[i] + t_training_delay)
-        sample = sensor_data[flags]
+        sample = sensor_data[flags][:18]
         t_sample = times_sec[flags]
 
-        if count<idx_split:
+        if i==387:   # Remove bad samples
+            continue
+
+        if idx_split_0 <= count < idx_split:
             X_train.append(sample.flatten())
             Y_train.append(sequence[i][1]-1)
             count += 1
         else:
-            X_test.append(sample.flatten())
+            if n_frames is not None:
+                X_test.append(sample[:n_frames].flatten())
+            else:
+                X_test.append(sample.flatten())
             Y_test.append(sequence[i][1]-1)
+
 
     X_train = np.array(X_train)
     Y_train = np.array(Y_train)
