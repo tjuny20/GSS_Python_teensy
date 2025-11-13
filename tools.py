@@ -660,6 +660,55 @@ def find_blocks(arr: np.ndarray, max_len: int = None):
                 blocks.append([int(i), int(j), val])
     return blocks
 
+def add_white_noise_cols(X, snr_db=None, snr_linear=None, seed=None, eps=1e-12):
+    """
+    Add zero-mean white Gaussian noise to an array of shape (N, 8) so that each
+    column attains the specified SNR.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Input array of shape (N, 8). (Works for any (N, M); columns treated independently.)
+    snr_db : float, optional
+        Desired SNR in dB (per column). Provide exactly one of snr_db or snr_linear.
+    snr_linear : float, optional
+        Desired SNR as a linear ratio (signal_power / noise_power), per column.
+    seed : int, optional
+        RNG seed for reproducibility.
+    eps : float
+        Tiny value to avoid divide-by-zero for silent columns.
+
+    Returns
+    -------
+    Y : np.ndarray
+        Noisy signal, same shape as X.
+    noise : np.ndarray
+        The noise that was added, same shape as X.
+    """
+    X = np.asarray(X, dtype=float)
+    if X.ndim != 2 or X.shape[1] != 8:
+        raise ValueError("X must be 2D with shape (N, 8).")
+
+    if (snr_db is None) == (snr_linear is None):
+        raise ValueError("Provide exactly one of snr_db or snr_linear.")
+
+    if snr_linear is None:
+        snr_linear = 10.0 ** (snr_db / 10.0)
+
+    # Signal power per column (mean over time N)
+    sig_power = np.mean(X**2, axis=0, keepdims=True)  # shape (1, 8)
+
+    # Target noise power per column
+    noise_power = sig_power / (snr_linear + eps)
+
+    # Std per column; broadcasts down rows
+    noise_std = np.sqrt(np.maximum(noise_power, 0.0))  # shape (1, 8)
+
+    rng = np.random.default_rng(seed)
+    noise = rng.normal(loc=0.0, scale=1.0, size=X.shape) * noise_std
+
+    Y = X + noise
+    return Y, noise
 
 def plot_two_intervals(i0, i1, j0, j1,
                        times_sec, sequence_sec, sequence, z_out,
@@ -908,3 +957,4 @@ def find_blocks(labels, max_len=20, ignore=0):
             prev = cur
 
     return blocks
+

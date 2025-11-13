@@ -12,12 +12,12 @@ n_out = 3
 n_train = 450
 filename = '1_600_20'
 
-grid_k = np.arange(5,55,5)
-grid_p = np.arange(0.1,1.1,0.1)
+grid_k = np.arange(10,110,10)
+grid_p = np.arange(0.05,0.55,0.05)
 grid_n_fold = 20
 
 sensor_data, sequence, times_sec, sequence_sec = load(filename, reduced=True)
-d_sensor_data = np.apply_along_axis(estimate_derivative, axis=0, arr=sensor_data)
+d_sensor_data = np.zeros_like(sensor_data)
 sensor_data = np.hstack((sensor_data, d_sensor_data))
 
 # baseline = np.mean(sensor_data[:300], axis=0)  # Add baseline substraction
@@ -99,5 +99,5 @@ results['y_true'] = np.array(results['y_true'], dtype=object)
 
 data = {'params': params, 'results': results}
 
-with open('data/gridsearch_stochastic.pkl', 'wb') as f:
+with open('data/gridsearch_blank.pkl', 'wb') as f:
     pickle.dump(data, f)
