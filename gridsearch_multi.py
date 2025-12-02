@@ -5,14 +5,16 @@ import pickle
 
 n_hd = 10000
 n_out = 3
-n_training = [3, 9, 15, 30]
+# n_training = [3, 9, 15, 30]
+files = ['mix_100_20_1']
 
+# for n in n_training:
+for file in files:
+    file_train = file
+    file_test = 'mix_50_20_1.csv'
 
-for n in n_training:
-    file = f'1_{n}_20'
-
-    grid_k = np.arange(5, 55, 5)
-    grid_p = np.arange(0.1, 1.1, 0.1)
+    grid_k = np.arange(5, 200, 5)
+    grid_p = np.arange(0.02, 0.2, 0.02)
     grid_n_fold = 5
 
 
@@ -26,11 +28,11 @@ for n in n_training:
                 for key in params.keys():
                     params[key].append(locals()[key])
 
-                train_data, train_sequence, train_times_sec, train_sequence_sec = load(file, reduced=True)
+                train_data, train_sequence, train_times_sec, train_sequence_sec = load(file_train, reduced=True)
                 train_d_sensor_data = np.apply_along_axis(estimate_derivative, axis=0, arr=train_data)
                 train_data = np.hstack((train_data, train_d_sensor_data))
 
-                data, sequence, times_sec, sequence_sec = load('1_600_20', reduced=True)
+                data, sequence, times_sec, sequence_sec = load(file_test, reduced=True)
                 d_sensor_data = np.apply_along_axis(estimate_derivative, axis=0, arr=data)
                 data_ = np.hstack((data, d_sensor_data))
                 _, _, _, _, \
