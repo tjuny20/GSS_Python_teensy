@@ -66,5 +66,5 @@ for file in files:
 
     data = {'params': params, 'results': results}
 
-    with open(f'data/gridsearch_{n}.pkl', 'wb') as f:
+    with open(f'data/gridsearch_mix_100.pkl', 'wb') as f:
         pickle.dump(data, f)
