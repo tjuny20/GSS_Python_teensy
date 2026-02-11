@@ -958,3 +958,23 @@ def find_blocks(labels, max_len=20, ignore=0):
 
     return blocks
 
+
+def expand_and_sparsify(data, sequence, times_sec, sequence_sec, n_hd=10000, k=30, W_hd=None):
+    x_dense = data
+    n_dense = x_dense.shape[1]
+
+    labels = np.zeros_like(times_sec)
+    for i, t in enumerate(sequence_sec):
+        try:
+            flag = (times_sec > sequence_sec[i]) & (times_sec < sequence_sec[i + 1])
+        except IndexError:
+            flag = (times_sec > sequence_sec[i])
+        labels[flag] = int(sequence[i][1])
+
+    if W_hd is None:
+        W_hd = np.random.binomial(n=1, p=0.05, size=(n_hd, n_dense))  # Test random sparse weights
+    x_hd = x_dense @ W_hd.T
+    z_hd = np.where(np.argsort(x_hd) < k, 1., 0)
+
+    return z_hd
+
