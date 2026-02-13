@@ -7,14 +7,14 @@ from matplotlib import font_manager as fm, rcParams
 
 rng = np.random.default_rng(42)  # for reproducibility
 
-n_hd = 10000
+n_hd = 2000
 n_out = 3
 n_train = 450
 filename = '1_600_20'
-
-grid_k = np.arange(10,110,10)
-grid_p = np.arange(0.05,0.55,0.05)
-grid_n_fold = 20
+file_save = 'params_texel'
+grid_k = np.arange(5, 100, 5)
+grid_p = np.arange(0.02, 0.2, 0.02)
+grid_n_fold = 10
 
 sensor_data, sequence, times_sec, sequence_sec = load(filename, reduced=True)
 d_sensor_data = np.zeros_like(sensor_data)
@@ -99,5 +99,5 @@ results['y_true'] = np.array(results['y_true'], dtype=object)
 
 data = {'params': params, 'results': results}
 
-with open('data/gridsearch_blank.pkl', 'wb') as f:
+with open(f'data/{file_save}.pkl', 'wb') as f:
     pickle.dump(data, f)

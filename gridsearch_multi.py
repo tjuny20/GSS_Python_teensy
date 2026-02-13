@@ -3,17 +3,18 @@ from tools import load, split, estimate_derivative, train, test
 import pickle
 
 
-n_hd = 10000
+n_hd = 2000
 n_out = 6
 # n_training = [3, 9, 15, 30]
 files = ['mix_100_20_1']
+file_save = 'params_texel_binary'
 
 # for n in n_training:
 for file in files:
     file_train = file
     file_test = 'mix_50_20_1'
 
-    grid_k = np.arange(5, 200, 5)
+    grid_k = np.arange(5, 100, 5)
     grid_p = np.arange(0.02, 0.2, 0.02)
     grid_n_fold = 5
 
@@ -63,5 +64,5 @@ for file in files:
 
     data = {'params': params, 'results': results}
 
-    with open(f'data/gridsearch_mix_100.pkl', 'wb') as f:
+    with open(f'data/{file_save}.pkl', 'wb') as f:
         pickle.dump(data, f)
