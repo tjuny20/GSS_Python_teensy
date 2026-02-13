@@ -67,7 +67,8 @@ for uniformW in grid_uniformW:
                             else:
                                 W_hd = np.random.binomial(n=1, p=0.05, size=(n_hd, n_dense))  #Test random sparse weights
                             x_hd = x_dense @ W_hd.T
-                            z_hd = np.where(np.argsort(x_hd)<k, 1., 0)
+                            ranks = np.argsort(np.argsort(-x_hd, axis=1), axis=1)
+                            z_hd = np.where(ranks < k, 1., 0.)
                             W_out = np.zeros((n_out, n_hd))
                             W = np.zeros((n_out, n_hd))
 
@@ -89,7 +90,8 @@ for uniformW in grid_uniformW:
                                 out = row @ W_out.T
                                 z_out[i] = out
 
-                            z_wta = np.where(np.argsort(z_out, axis=1)<1, 1., 0)
+                            ranks_out = np.argsort(np.argsort(-z_out, axis=1), axis=1)
+                            z_wta = np.where(ranks_out < 1, 1., 0.)
 
                             z_pred = np.zeros_like(sequence_sec)
                             z_true = np.zeros_like(sequence_sec)

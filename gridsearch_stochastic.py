@@ -12,7 +12,7 @@ n_out = 3
 n_train = 450
 filename = '1_600_20'
 file_save = 'params_texel'
-grid_k = np.arange(5, 100, 5)
+grid_k = np.arange(10, 200, 10)
 grid_p = np.arange(0.02, 0.2, 0.02)
 grid_n_fold = 10
 
@@ -47,7 +47,8 @@ for k in grid_k:
 
             W_hd = np.random.binomial(n=1, p=0.05, size=(n_hd, n_dense))  #Test random sparse weights
             x_hd = x_dense @ W_hd.T
-            z_hd = np.where(np.argsort(x_hd)<k, 1., 0)
+            ranks = np.argsort(np.argsort(-x_hd, axis=1), axis=1)
+            z_hd = np.where(ranks < k, 1., 0.)
             W_out = np.zeros((n_out, n_hd))
             W = np.zeros((n_out, n_hd))
 
@@ -67,7 +68,8 @@ for k in grid_k:
                 out = row @ W_out.T
                 z_out_acc[i] = out
 
-            z_wta = np.where(np.argsort(z_out_acc, axis=1)<1, 1., 0)
+            ranks_out = np.argsort(np.argsort(-z_out_acc, axis=1), axis=1)
+            z_wta = np.where(ranks_out < 1, 1., 0.)
 
             z_pred = np.zeros_like(sequence_sec)
             z_true = np.zeros_like(sequence_sec)

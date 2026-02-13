@@ -825,7 +825,8 @@ def train(sensor_data, sequence, times_sec, sequence_sec,
 
     W_hd = np.random.binomial(n=1, p=0.05, size=(n_hd, n_dense))  #Test random sparse weights
     x_hd = x_dense @ W_hd.T
-    z_hd = np.where(np.argsort(x_hd)<k, 1., 0)
+    ranks = np.argsort(np.argsort(-x_hd, axis=1), axis=1)
+    z_hd = np.where(ranks < k, 1., 0.)
     W_out = np.zeros((n_out, n_hd))
     W = np.zeros((n_out, n_hd))
 
@@ -853,7 +854,8 @@ def test(sensor_data, sequence, times_sec, sequence_sec,
         x_dense = sensor_data_norm
 
     x_hd = x_dense @ W_hd.T
-    z_hd = np.where(np.argsort(x_hd)<k, 1., 0)
+    ranks = np.argsort(np.argsort(-x_hd, axis=1), axis=1)
+    z_hd = np.where(ranks < k, 1., 0.)
     z_out = np.zeros((z_hd.shape[0],  n_out))
     for i, row in enumerate(z_hd):
         out = row @ W_out.T
@@ -974,7 +976,8 @@ def expand_and_sparsify(data, sequence, times_sec, sequence_sec, n_hd=10000, k=3
     if W_hd is None:
         W_hd = np.random.binomial(n=1, p=0.05, size=(n_hd, n_dense))  # Test random sparse weights
     x_hd = x_dense @ W_hd.T
-    z_hd = np.where(np.argsort(x_hd) < k, 1., 0)
+    ranks = np.argsort(np.argsort(-x_hd, axis=1), axis=1)
+    z_hd = np.where(ranks < k, 1., 0.)
 
     return z_hd
 

@@ -14,7 +14,7 @@ for file in files:
     file_train = file
     file_test = 'mix_50_20_1'
 
-    grid_k = np.arange(5, 100, 5)
+    grid_k = np.arange(10, 200, 10)
     grid_p = np.arange(0.02, 0.2, 0.02)
     grid_n_fold = 5
 
