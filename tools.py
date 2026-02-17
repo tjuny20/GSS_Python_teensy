@@ -799,7 +799,7 @@ def plot_two_intervals(i0, i1, j0, j1,
     return fig, ax
 
 def train(sensor_data, sequence, times_sec, sequence_sec,
-          n_hd=10000, n_out=3, k=10, p=0.5, w_teacher=1.,
+          n_hd=10000, n_out=3, k=10, p=0.5, p_hd=0.05, w_teacher=1.,
           normalized=False, whitened=False, rng_seed=42):
 
     rng = np.random.default_rng(rng_seed)  # for reproducibility
@@ -823,7 +823,7 @@ def train(sensor_data, sequence, times_sec, sequence_sec,
         labels[flag] = int(sequence[i][1])
 
 
-    W_hd = np.random.binomial(n=1, p=0.05, size=(n_hd, n_dense))  #Test random sparse weights
+    W_hd = np.random.binomial(n=1, p=p_hd, size=(n_hd, n_dense))  # Test random sparse weights
     x_hd = x_dense @ W_hd.T
     ranks = np.argsort(np.argsort(-x_hd, axis=1), axis=1)
     z_hd = np.where(ranks < k, 1., 0.)
@@ -980,4 +980,3 @@ def expand_and_sparsify(data, sequence, times_sec, sequence_sec, n_hd=10000, k=3
     z_hd = np.where(ranks < k, 1., 0.)
 
     return z_hd
-
