@@ -16,7 +16,7 @@ for file in files:
 
     grid_s = np.arange(0.005, 0.105, 0.005)
     grid_p = np.arange(0.005, 0.055, 0.005)
-    grid_p_hd = np.arange(0.01, 0.1, 0.02)
+    grid_p_hd = [0.05]
     grid_normalized = [False, True]
     grid_n_fold = 10
 
