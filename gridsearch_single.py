@@ -18,7 +18,8 @@ file_save = 'gs_single'
 grid_s = np.arange(0.005, 0.105, 0.005)
 grid_p = np.arange(0.005, 0.055, 0.005)
 grid_p_hd = [0.05]
-grid_normalized = [False, True]
+grid_normalized = ['raw', 'min-max', 'normalized', 'whitened']
+grid_top_bot = [False, True]
 grid_n_fold = 10
 
 
