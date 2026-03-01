@@ -114,7 +114,7 @@ for kernel in grid_kernel:
                         results['y_pred'].append(z_pred.copy())
                         results['y_true'].append(z_true.copy())
 
-                        print(f'p_hd: {p_hd}, s: {s}, k: {k}, p: {p}, normalized: {normalized}, n_fold: {n_fold}')
+                        print(f'p_hd: {p_hd}, s: {s}, k: {k}, p: {p}, normalized: {normalized}, kernel: {kernel}, n_fold: {n_fold}')
                         print(f'Train accuracy: {train_acc:.4f}, Test accuracy: {test_acc:.4f}')
 
 for key in params.keys():
