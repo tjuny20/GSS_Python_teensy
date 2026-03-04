@@ -13,14 +13,20 @@ n_out = 3
 
 n_train = 450
 filename = '1_600_20'
-file_save = 'gs_single'
+file_save = 'gs_single_2'
 
-grid_s = np.arange(0.01, 0.11, 0.01)
-grid_p = 1/ np.concatenate([np.ones(1), np.arange(5,105,5)])
-grid_p_hd = [0.05]
-grid_normalized = ['raw', 'min-max', 'normalized', 'whitened']
-grid_kernel = ['top', 'rank']
-grid_n_fold = 10
+# grid_s = [0.03, 0.15, 0.3]
+# grid_p = np.flip(1/ np.concatenate([np.ones(1), np.arange(25,105,25)]))
+# grid_p_hd = [0.05, 0.15, 0.25, 0.35]
+# grid_normalized = ['raw', 'min-max', 'normalized', 'whitened']
+# grid_kernel = ['top', 'rank']
+
+grid_p = [0.01]
+grid_normalized = ['raw', 'whitened']
+grid_kernel = ['top']
+grid_n_fold = 5
+grid_s = np.concatenate([np.arange(0.01, 0.05, 0.02), np.arange(0.1, 0.5, 0.1)])
+grid_p_hd = np.arange(0.05, 0.50, 0.1)
 
 
 sensor_data, sequence, times_sec, sequence_sec = load(filename, reduced=True)
