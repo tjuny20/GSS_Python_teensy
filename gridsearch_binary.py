@@ -12,7 +12,7 @@ n_out = 6
 
 file_train = 'mix_100_20_1'
 file_test = 'mix_50_20_1'
-file_save = 'gs_binary_2'
+file_save = 'gs_binary_r'
 
 # grid_s = np.arange(0.01, 0.11, 0.01)
 # grid_p = 1/ np.concatenate([np.ones(1), np.arange(5,105,5)])
@@ -24,7 +24,7 @@ file_save = 'gs_binary_2'
 
 grid_p = [0.01]
 grid_normalized = ['raw', 'whitened']
-grid_kernel = ['top']
+grid_kernel = ['rank']
 grid_n_fold = 5
 grid_s = np.concatenate([np.arange(0.01, 0.05, 0.02), np.arange(0.1, 0.5, 0.1)])
 grid_p_hd = np.arange(0.05, 0.50, 0.1)

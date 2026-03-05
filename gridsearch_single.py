@@ -13,7 +13,7 @@ n_out = 3
 
 n_train = 450
 filename = '1_600_20'
-file_save = 'gs_single_2'
+file_save = 'gs_single_r'
 
 # grid_s = [0.03, 0.15, 0.3]
 # grid_p = np.flip(1/ np.concatenate([np.ones(1), np.arange(25,105,25)]))
@@ -23,7 +23,7 @@ file_save = 'gs_single_2'
 
 grid_p = [0.01]
 grid_normalized = ['raw', 'whitened']
-grid_kernel = ['top']
+grid_kernel = ['rank']
 grid_n_fold = 5
 grid_s = np.concatenate([np.arange(0.01, 0.05, 0.02), np.arange(0.1, 0.5, 0.1)])
 grid_p_hd = np.arange(0.05, 0.50, 0.1)
