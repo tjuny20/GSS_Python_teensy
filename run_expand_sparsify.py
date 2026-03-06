@@ -148,9 +148,9 @@ def build_configs(sensor_data, h, n_sensors):
 # ── Gridsearch ──────────────────────────────────────────────────────────
 def run_gridsearch(filename, pkl_path,
                    n_hd=10_000,
-                   p_hd_sweep=(0.025, 0.05, 0.1, 0.2, 0.4, 0.6),
-                   d_sweep=(0.025, 0.05, 0.1, 0.2, 0.4, 0.6),
-                   n_pairs=2_000,
+                   p_hd_sweep=(0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.975),
+                   d_sweep=(0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.975),
+                   n_pairs=1_000,
                    n_repeats=10):
     """Run the expand-and-sparsify gridsearch for one dataset."""
 
