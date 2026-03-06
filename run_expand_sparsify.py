@@ -268,7 +268,7 @@ def run_gridsearch(filename, pkl_path,
                     del W_hd, x_hd_lab, z_hd_lab
 
                 acc_table[(cfg_name, p, d)] = (np.mean(accs), np.std(accs))
-                print(f"    [{combo_i:2d}/{n_combos}]  p={p}  d={d:.2f}  "
+                print(f"    [{combo_i:2d}/{n_combos}]  p={p}  d={d}  "
                       f"acc={np.mean(accs):.4f} +/- {np.std(accs):.4f}")
 
         del x_dense_t, x_labeled_t
