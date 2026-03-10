@@ -17,10 +17,10 @@ file_save = 'gs_binary_framewise'
 
 grid_p = [0.01]
 grid_normalized = ['raw', 'whitened']
-grid_kernel = ['rank']
+grid_kernel = ['top']
 grid_n_fold = 5
-grid_s = np.concatenate([np.arange(0.01, 0.05, 0.02), np.arange(0.1, 0.5, 0.1)])
-grid_p_hd = np.arange(0.05, 0.50, 0.1)
+grid_p_hd = [0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.975]
+grid_d = [0.025, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
 
 
 # --- Load data ---
@@ -99,7 +99,7 @@ for i, t in enumerate(test_sequence_sec):
 
 
 # --- Grid search ---
-params = {'expansion': [], 'p_hd': [], 's': [], 'p': [], 'normalized': [], 'kernel': [], 'n_fold': []}
+params = {'expansion': [], 'p_hd': [], 'd': [], 'p': [], 'normalized': [], 'kernel': [], 'n_fold': []}
 results = {'train_acc': [], 'test_acc': [], 'y_pred': [], 'y_true': []}
 
 for exp_name in train_configs.keys():
@@ -108,11 +108,11 @@ for exp_name in train_configs.keys():
 
     for kernel in grid_kernel:
         for p_hd in grid_p_hd:
-            for s in grid_s:
+            for d in grid_d:
                 for p in grid_p:
                     for normalized in grid_normalized:
                         for n_fold in range(grid_n_fold):
-                            k = int(s * n_hd)
+                            k = int(d * n_hd)
 
                             # Normalization (fit on train, apply to both)
                             if normalized == 'min-max':
@@ -180,13 +180,13 @@ for exp_name in train_configs.keys():
 
                             params['expansion'].append(exp_name)
                             params['p_hd'].append(p_hd)
-                            params['s'].append(s)
+                            params['d'].append(d)
                             params['p'].append(p)
                             params['normalized'].append(normalized)
                             params['kernel'].append(kernel)
                             params['n_fold'].append(n_fold)
 
-                            print(f'[{exp_name}] p_hd: {p_hd:.2f}, s: {s}, k: {k}, p: {p}, '
+                            print(f'[{exp_name}] p_hd: {p_hd}, d: {d}, k: {k}, p: {p}, '
                                   f'normalized: {normalized}, kernel: {kernel}, n_fold: {n_fold}')
                             print(f'  Train accuracy: {train_acc:.4f}, Test accuracy: {test_acc:.4f}')
 
