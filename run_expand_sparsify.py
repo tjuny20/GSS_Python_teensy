@@ -312,7 +312,7 @@ def run_gridsearch(train_filename, test_filename, pkl_path,
 if __name__ == '__main__':
     t_start = time.time()
 
-    run_gridsearch('1_300_20',     '1_150_20',     'data/expand_sparsify_results.pkl')
+    run_gridsearch('1_600_20',     '1_300_20',     'data/expand_sparsify_results.pkl')
     run_gridsearch('mix_100_20_1', 'mix_50_20_1', 'data/expand_sparsify_mix_results.pkl')
 
     print(f"\nAll done in {time.time() - t_start:.1f}s")
