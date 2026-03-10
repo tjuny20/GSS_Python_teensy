@@ -2,17 +2,13 @@
 """
 Expand-and-sparsify gridsearch for GPU server.
 
-Runs the full p_hd x d sweep for both 1_600_20 and mix_100_20_1 sequences,
-computing cosine similarities (input vs output inner products) and linear SVM
-accuracy on z_hd. Saves results as pickles that the Jupyter notebooks can
-load directly.
+Runs the full p_hd x d sweep, computing cosine similarities (input vs output
+inner products) and linear SVM accuracy on z_hd. Takes separate training and
+test data files. Saves results as pickles that the Jupyter notebooks can load
+directly.
 
 Usage:
     python run_expand_sparsify.py
-
-Expects:
-    data/1_600_20.csv,            data/1_600_20_sequence.pkl
-    data/mix_100_20_1.csv,        data/mix_100_20_1_sequence.pkl
 """
 
 import numpy as np
@@ -23,7 +19,6 @@ import csv
 import time
 from math import comb
 from datetime import datetime
-from sklearn.model_selection import train_test_split
 
 
 # ── Device ──────────────────────────────────────────────────────────────
@@ -146,51 +141,68 @@ def build_configs(sensor_data, h, n_sensors):
 
 
 # ── Gridsearch ──────────────────────────────────────────────────────────
-def run_gridsearch(filename, pkl_path,
+def run_gridsearch(train_filename, test_filename, pkl_path,
                    n_hd=10_000,
                    p_hd_sweep=(0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.975),
                    d_sweep=(0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.975),
                    n_pairs=1_000,
                    n_repeats=10):
-    """Run the expand-and-sparsify gridsearch for one dataset."""
+    """Run the expand-and-sparsify gridsearch with separate train/test data."""
 
     if os.path.exists(pkl_path):
         print(f"\n  {pkl_path} already exists -- skipping. Delete to recompute.")
         return
 
     print(f"\n{'='*64}")
-    print(f"  {filename}  ->  {pkl_path}")
+    print(f"  train={train_filename}  test={test_filename}  ->  {pkl_path}")
     print(f"{'='*64}")
     t0_total = time.time()
 
-    # ---- load ----
-    sensor_data, sequence, times_sec, sequence_sec = load(filename, reduced=True)
-    h = np.median(np.diff(times_sec))
-    n_sensors = sensor_data.shape[1]
+    # ---- load training data ----
+    train_sensor, train_seq, train_times, train_seq_sec = load(train_filename, reduced=True)
+    h_train = np.median(np.diff(train_times))
+    n_sensors = train_sensor.shape[1]
 
-    labels = np.zeros_like(times_sec)
-    for i in range(len(sequence_sec)):
+    train_labels = np.zeros_like(train_times)
+    for i in range(len(train_seq_sec)):
         try:
-            flag = (times_sec > sequence_sec[i]) & (times_sec < sequence_sec[i + 1])
+            flag = (train_times > train_seq_sec[i]) & (train_times < train_seq_sec[i + 1])
         except IndexError:
-            flag = (times_sec > sequence_sec[i])
-        labels[flag] = int(sequence[i][1])
+            flag = (train_times > train_seq_sec[i])
+        train_labels[flag] = int(train_seq[i][1])
 
-    labeled_mask = labels > 0
-    y_labels_0 = labels[labeled_mask].astype(int) - 1
-    n_classes = int(y_labels_0.max()) + 1
+    train_labeled_mask = train_labels > 0
+    y_train_0 = train_labels[train_labeled_mask].astype(int) - 1
 
-    print(f"  Sensor data : {sensor_data.shape}")
-    print(f"  Labeled     : {np.sum(labeled_mask)}")
+    # ---- load test data ----
+    test_sensor, test_seq, test_times, test_seq_sec = load(test_filename, reduced=True)
+    h_test = np.median(np.diff(test_times))
+
+    test_labels = np.zeros_like(test_times)
+    for i in range(len(test_seq_sec)):
+        try:
+            flag = (test_times > test_seq_sec[i]) & (test_times < test_seq_sec[i + 1])
+        except IndexError:
+            flag = (test_times > test_seq_sec[i])
+        test_labels[flag] = int(test_seq[i][1])
+
+    test_labeled_mask = test_labels > 0
+    y_test_0 = test_labels[test_labeled_mask].astype(int) - 1
+
+    n_classes = max(int(y_train_0.max()), int(y_test_0.max())) + 1
+
+    print(f"  Train data  : {train_sensor.shape}  (labeled: {np.sum(train_labeled_mask)})")
+    print(f"  Test data   : {test_sensor.shape}  (labeled: {np.sum(test_labeled_mask)})")
     print(f"  Classes     : {n_classes}")
     print(f"  n_hd={n_hd}  n_repeats={n_repeats}  n_pairs={n_pairs}")
     print(f"  p_hd_sweep  : {list(p_hd_sweep)}")
     print(f"  d_sweep     : {list(d_sweep)}")
 
     # ---- configs ----
-    configs = build_configs(sensor_data, h, n_sensors)
-    config_names = list(configs.keys())
-    for name, x in configs.items():
+    train_configs = build_configs(train_sensor, h_train, n_sensors)
+    test_configs  = build_configs(test_sensor, h_test, n_sensors)
+    config_names = list(train_configs.keys())
+    for name, x in train_configs.items():
         print(f"  {name}: {x.shape}")
 
     # ---- gridsearch ----
@@ -198,30 +210,33 @@ def run_gridsearch(filename, pkl_path,
     cos_output = {}
     acc_table  = {}
 
-    y_t = torch.tensor(y_labels_0, dtype=torch.long, device=device)
+    y_train_t = torch.tensor(y_train_0, dtype=torch.long, device=device)
+    y_test_t  = torch.tensor(y_test_0,  dtype=torch.long, device=device)
 
     for ci, cfg_name in enumerate(config_names):
         print(f"\n  [{ci+1}/{len(config_names)}] {cfg_name}")
         t0_cfg = time.time()
 
-        x_dense  = configs[cfg_name]
-        n_dense  = x_dense.shape[1]
-        x_dense_t = torch.tensor(x_dense, dtype=torch.float32, device=device)
+        x_train_dense = train_configs[cfg_name]
+        n_dense = x_train_dense.shape[1]
+        x_train_dense_t = torch.tensor(x_train_dense, dtype=torch.float32, device=device)
 
-        # -- dense cosine similarities (sampled pairs) --
-        n_samples = x_dense.shape[0]
+        # -- dense cosine similarities (sampled pairs from training data) --
+        n_samples = x_train_dense.shape[0]
         pair_idx = np.array([np.random.choice(n_samples, size=2, replace=False)
                              for _ in range(n_pairs)])
         i1 = torch.tensor(pair_idx[:, 0], device=device)
         i2 = torch.tensor(pair_idx[:, 1], device=device)
-        v1 = x_dense_t[i1]
-        v2 = x_dense_t[i2]
+        v1 = x_train_dense_t[i1]
+        v2 = x_train_dense_t[i2]
         cos_dense = (v1 * v2).sum(dim=1) / (v1.norm(dim=1) * v2.norm(dim=1))
         cos_input[cfg_name] = cos_dense.cpu().numpy()
         del v1, v2
 
-        x_labeled   = x_dense[labeled_mask]
-        x_labeled_t = torch.tensor(x_labeled, dtype=torch.float32, device=device)
+        x_train_labeled_t = torch.tensor(
+            x_train_dense[train_labeled_mask], dtype=torch.float32, device=device)
+        x_test_labeled_t = torch.tensor(
+            test_configs[cfg_name][test_labeled_mask], dtype=torch.float32, device=device)
 
         n_combos = len(p_hd_sweep) * len(d_sweep)
         combo_i  = 0
@@ -231,10 +246,10 @@ def run_gridsearch(filename, pkl_path,
                 combo_i += 1
                 k = int(d * n_hd)
 
-                # -- project + sparsify (inner product scatter) --
+                # -- project + sparsify (inner product scatter on training data) --
                 W_hd = torch.bernoulli(
                     torch.full((n_hd, n_dense), p, device=device))
-                x_hd = x_dense_t @ W_hd.T
+                x_hd = x_train_dense_t @ W_hd.T
                 _, topk_idx = torch.topk(x_hd, k, dim=1, largest=True)
                 z_hd = torch.zeros_like(x_hd)
                 z_hd.scatter_(1, topk_idx, 1.0)
@@ -249,29 +264,28 @@ def run_gridsearch(filename, pkl_path,
                     torch.manual_seed(seed)
                     W_hd = torch.bernoulli(
                         torch.full((n_hd, n_dense), p, device=device))
-                    x_hd_lab = x_labeled_t @ W_hd.T
-                    _, topk_idx = torch.topk(x_hd_lab, k, dim=1, largest=True)
-                    z_hd_lab = torch.zeros_like(x_hd_lab)
-                    z_hd_lab.scatter_(1, topk_idx, 1.0)
 
-                    indices = np.arange(len(y_labels_0))
-                    tr_idx, te_idx = train_test_split(
-                        indices, test_size=0.2,
-                        random_state=seed, stratify=y_labels_0)
-                    tr_idx = torch.tensor(tr_idx, device=device)
-                    te_idx = torch.tensor(te_idx, device=device)
+                    x_hd_train = x_train_labeled_t @ W_hd.T
+                    _, topk_idx = torch.topk(x_hd_train, k, dim=1, largest=True)
+                    z_hd_train = torch.zeros_like(x_hd_train)
+                    z_hd_train.scatter_(1, topk_idx, 1.0)
+
+                    x_hd_test = x_test_labeled_t @ W_hd.T
+                    _, topk_idx = torch.topk(x_hd_test, k, dim=1, largest=True)
+                    z_hd_test = torch.zeros_like(x_hd_test)
+                    z_hd_test.scatter_(1, topk_idx, 1.0)
 
                     W, b = train_linear_svm(
-                        z_hd_lab[tr_idx], y_t[tr_idx], n_classes)
+                        z_hd_train, y_train_t, n_classes)
                     accs.append(score_linear_svm(
-                        z_hd_lab[te_idx], y_t[te_idx], W, b))
-                    del W_hd, x_hd_lab, z_hd_lab
+                        z_hd_test, y_test_t, W, b))
+                    del W_hd, x_hd_train, z_hd_train, x_hd_test, z_hd_test
 
                 acc_table[(cfg_name, p, d)] = (np.mean(accs), np.std(accs))
                 print(f"    [{combo_i:2d}/{n_combos}]  p={p}  d={d}  "
                       f"acc={np.mean(accs):.4f} +/- {np.std(accs):.4f}")
 
-        del x_dense_t, x_labeled_t
+        del x_train_dense_t, x_train_labeled_t, x_test_labeled_t
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         print(f"    done in {time.time() - t0_cfg:.1f}s")
@@ -298,7 +312,7 @@ def run_gridsearch(filename, pkl_path,
 if __name__ == '__main__':
     t_start = time.time()
 
-    run_gridsearch('1_600_20',     'data/expand_sparsify_results.pkl')
-    run_gridsearch('mix_100_20_1', 'data/expand_sparsify_mix_results.pkl')
+    run_gridsearch('1_300_20',     '1_150_20',     'data/expand_sparsify_results.pkl')
+    run_gridsearch('mix_100_20_1', 'mix_50_20_1', 'data/expand_sparsify_mix_results.pkl')
 
     print(f"\nAll done in {time.time() - t_start:.1f}s")
