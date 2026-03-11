@@ -13,10 +13,10 @@ n_out = 6
 
 file_train = 'mix_100_20_1'
 file_test = 'mix_50_20_1'
-file_save = 'gs_binary_texel'
+file_save = 'gs_binary_texel_w'
 
 grid_p = [1.]
-grid_normalized = ['raw']
+grid_normalized = ['whitened']
 grid_kernel = ['top']
 grid_n_fold = 5
 grid_p_hd = [0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.975]
