@@ -343,8 +343,10 @@ def whiten(X):
     Xwhite = X - np.mean(X, axis=0)
     pca = PCA()
     pca.fit(Xwhite)
-    U = np.matmul(np.linalg.inv((pca.explained_variance_*np.identity(X.shape[1]))**(1/2)),
-                  pca.components_)
+    mask = pca.explained_variance_ > 1e-12
+    components = pca.components_[mask]
+    variances = pca.explained_variance_[mask]
+    U = np.matmul(np.diag(1.0 / np.sqrt(variances)), components)
     return np.matmul(U, Xwhite.transpose()).transpose()
 
 
