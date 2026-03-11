@@ -8,14 +8,14 @@ from tools import load, normalize, whiten
 
 rng = np.random.default_rng(42)  # for reproducibility
 
-n_hd = 10000
+n_hd = 2000
 n_out = 6
 
 file_train = 'mix_100_20_1'
 file_test = 'mix_50_20_1'
-file_save = 'gs_binary_framewise'
+file_save = 'gs_binary_texel'
 
-grid_p = [0.01]
+grid_p = [1.]
 grid_normalized = ['raw']
 grid_kernel = ['top']
 grid_n_fold = 5

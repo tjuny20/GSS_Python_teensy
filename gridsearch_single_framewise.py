@@ -8,14 +8,14 @@ from tools import load, normalize, whiten
 
 rng = np.random.default_rng(42)  # for reproducibility
 
-n_hd = 10000
+n_hd = 2000
 n_out = 3
 
 n_train = 450
 filename = '1_600_20'
-file_save = 'gs_single_framewise'
+file_save = 'gs_single_texel'
 
-grid_p = [0.01]
+grid_p = [1.]
 grid_normalized = ['raw']
 grid_kernel = ['top']
 grid_n_fold = 5
