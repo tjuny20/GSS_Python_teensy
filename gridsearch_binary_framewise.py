@@ -3,6 +3,7 @@ from sklearn import metrics
 import pickle
 from math import comb
 
+from sklearn.decomposition import PCA
 from tools import load, normalize, whiten
 
 
@@ -126,8 +127,13 @@ for exp_name in train_configs.keys():
                                 x_train = normalize(train_expanded)
                                 x_test  = normalize(test_expanded)
                             elif normalized == 'whitened':
-                                x_train = whiten(train_expanded)
-                                x_test  = whiten(test_expanded)
+                                train_mean = np.mean(train_expanded, axis=0)
+                                pca = PCA()
+                                pca.fit(train_expanded - train_mean)
+                                mask = pca.explained_variance_ > 1e-12
+                                U = np.diag(1.0 / np.sqrt(pca.explained_variance_[mask])) @ pca.components_[mask]
+                                x_train = (U @ (train_expanded - train_mean).T).T
+                                x_test  = (U @ (test_expanded  - train_mean).T).T
                             else:
                                 x_train = train_expanded
                                 x_test  = test_expanded
