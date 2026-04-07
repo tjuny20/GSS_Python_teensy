@@ -143,7 +143,7 @@ def build_configs(sensor_data, h, n_sensors):
 def run_gridsearch_single(filename, pkl_path, n_train=450,
                           n_hd=10_000,
                           p_hd_sweep=(0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.975),
-                          d_sweep=(0.025, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5),
+                          d_sweep=(0.025, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6),
                           n_pairs=1_000,
                           n_repeats=10):
     """Expand-and-sparsify gridsearch for a single file, split at n_train sequences."""
@@ -484,12 +484,12 @@ if __name__ == '__main__':
     # Single gas: 1_600_20 with n_train=450 sequence split
     run_gridsearch_single(
         '1_600_20',
-        'data/expand_sparsify_176_results.pkl',
+        'data/expand_sparsify_176_results_2.pkl',
         n_train=450)
 
     # Binary mixtures: separate train/test files
     run_gridsearch_binary(
         'mix_100_20_1', 'mix_50_20_1',
-        'data/expand_sparsify_176_mix_results.pkl')
+        'data/expand_sparsify_176_mix_results_2.pkl')
 
     print(f"\nAll done in {time.time() - t_start:.1f}s")
