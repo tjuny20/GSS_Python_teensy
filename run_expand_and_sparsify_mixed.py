@@ -231,6 +231,7 @@ def run_gridsearch_single(filename, pkl_path, n_train=450,
     cos_input  = {}
     cos_output = {}
     acc_table  = {}
+    pair_log   = {}   # cfg_name -> [(rp, dp), ...] length n_repeats
 
     y_train_t = torch.tensor(y_train_0, dtype=torch.long, device=device)
     y_test_t  = torch.tensor(y_test_0,  dtype=torch.long, device=device)
@@ -241,9 +242,22 @@ def run_gridsearch_single(filename, pkl_path, n_train=450,
         print(f"\n  [{ci+1}/{len(config_names)}] {cfg_name}")
         t0_cfg = time.time()
 
+        # -- pre-sample pairs for all repeats and log them --
+        seed_pairs = {}
+        pairs_list = []
+        for seed in range(n_repeats):
+            if needs_pairs:
+                rp, dp = sample_pairs(n_sensors, seed)
+                seed_pairs[seed] = (rp, dp)
+                pairs_list.append((rp[:n_ratios], dp[:n_diffs]))
+            else:
+                seed_pairs[seed] = (None, None)
+                pairs_list.append(([], []))
+        pair_log[cfg_name] = pairs_list
+
         # -- build reference expansion (seed=0) for cosine similarities --
         if needs_pairs:
-            rp0, dp0 = sample_pairs(n_sensors, seed=0)
+            rp0, dp0 = seed_pairs[0]
             x_dense = build_expansion(sensor_data, deriv_cache, max_order,
                                       n_ratios, n_diffs, rp0, dp0)
         else:
@@ -290,7 +304,7 @@ def run_gridsearch_single(filename, pkl_path, n_train=450,
                     torch.manual_seed(seed)
 
                     if needs_pairs:
-                        rp, dp = sample_pairs(n_sensors, seed)
+                        rp, dp = seed_pairs[seed]
                         x_exp = build_expansion(sensor_data, deriv_cache,
                                                 max_order, n_ratios, n_diffs,
                                                 rp, dp)
@@ -337,6 +351,8 @@ def run_gridsearch_single(filename, pkl_path, n_train=450,
             'cos_input':    cos_input,
             'cos_output':   cos_output,
             'acc_table':    acc_table,
+            'pair_log':     pair_log,
+            'config_specs': dict(CONFIG_SPECS),
             'config_names': config_names,
             'p_hd_sweep':   list(p_hd_sweep),
             'd_sweep':      list(d_sweep),
@@ -423,6 +439,7 @@ def run_gridsearch_binary(train_filename, test_filename, pkl_path,
     cos_input  = {}
     cos_output = {}
     acc_table  = {}
+    pair_log   = {}   # cfg_name -> [(rp, dp), ...] length n_repeats
 
     y_train_t = torch.tensor(y_train_0, dtype=torch.long, device=device)
     y_test_t  = torch.tensor(y_test_0,  dtype=torch.long, device=device)
@@ -433,9 +450,22 @@ def run_gridsearch_binary(train_filename, test_filename, pkl_path,
         print(f"\n  [{ci+1}/{len(config_names)}] {cfg_name}")
         t0_cfg = time.time()
 
+        # -- pre-sample pairs for all repeats and log them --
+        seed_pairs = {}
+        pairs_list = []
+        for seed in range(n_repeats):
+            if needs_pairs:
+                rp, dp = sample_pairs(n_sensors, seed)
+                seed_pairs[seed] = (rp, dp)
+                pairs_list.append((rp[:n_ratios], dp[:n_diffs]))
+            else:
+                seed_pairs[seed] = (None, None)
+                pairs_list.append(([], []))
+        pair_log[cfg_name] = pairs_list
+
         # -- build reference expansion (seed=0) for cosine similarities --
         if needs_pairs:
-            rp0, dp0 = sample_pairs(n_sensors, seed=0)
+            rp0, dp0 = seed_pairs[0]
             x_train_dense = build_expansion(train_sensor, deriv_cache_train,
                                             max_order, n_ratios, n_diffs, rp0, dp0)
         else:
@@ -482,7 +512,7 @@ def run_gridsearch_binary(train_filename, test_filename, pkl_path,
                     torch.manual_seed(seed)
 
                     if needs_pairs:
-                        rp, dp = sample_pairs(n_sensors, seed)
+                        rp, dp = seed_pairs[seed]
                         x_exp_train = build_expansion(
                             train_sensor, deriv_cache_train, max_order,
                             n_ratios, n_diffs, rp, dp)
@@ -535,6 +565,8 @@ def run_gridsearch_binary(train_filename, test_filename, pkl_path,
             'cos_input':    cos_input,
             'cos_output':   cos_output,
             'acc_table':    acc_table,
+            'pair_log':     pair_log,
+            'config_specs': dict(CONFIG_SPECS),
             'config_names': config_names,
             'p_hd_sweep':   list(p_hd_sweep),
             'd_sweep':      list(d_sweep),
