@@ -18,7 +18,7 @@ file_save = 'gs_single_mixed'
 grid_p = [0.01, 0.1]
 grid_normalized = ['raw']
 grid_kernel = ['top']
-grid_n_fold = 5
+grid_n_fold = 10
 grid_p_hd = [0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.975]
 grid_d = [0.025, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
 
@@ -83,10 +83,7 @@ def build_expansion(data, deriv_cache, max_order, n_ratios, n_diffs, rp, dp):
 
 # --- Config specs (same as run_expand_and_sparsify_mixed.py) ---
 CONFIG_SPECS = {
-    '∂¹+∂²':              (2, 0, 0),
-    '∂¹+∂² + 8R + 8D':    (2, 8, 8),
     '∂¹+∂² + 56R + 56D':  (2, 56, 56),
-    '∂¹⁻⁷ + 56R + 56D':   (7, 56, 56),
 }
 
 # Precompute derivative expansions (deterministic, no pairs)
