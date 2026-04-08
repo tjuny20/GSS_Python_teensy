@@ -6,8 +6,8 @@ Expand-and-sparsify gridsearch for GPU server.
 Configs (with per-repeat pair resampling for ratios & differences):
     ∂¹+∂²                  (24 traces)
     ∂¹+∂² + 8R + 8D        (40 traces)
-    ∂¹+∂² + 64R + 64D      (152 traces)
-    ∂¹⁻⁷ + 64R + 64D       (192 traces)
+    ∂¹+∂² + 56R + 56D      (136 traces)
+    ∂¹⁻⁷ + 56R + 56D       (176 traces)
 
 Single gas:    1_600_20 with n_train=450 sequence-based split
 Binary mix:    mix_100_20_1 (train) / mix_50_20_1 (test)
@@ -99,14 +99,14 @@ def sample_pairs(n_sensors, seed):
     return rp, dp
 
 
-def all_pairs_with_self(n_sensors):
-    """All n_sensors*n_sensors ordered pairs (including self)."""
-    return [(i, j) for i in range(n_sensors) for j in range(n_sensors)]
+def all_ordered_pairs(n_sensors):
+    """All n_sensors*(n_sensors-1) ordered pairs (excluding self)."""
+    return [(i, j) for i in range(n_sensors) for j in range(n_sensors) if i != j]
 
 
 def needs_resampling(n_ratios, n_diffs, n_sensors):
-    """64R/64D uses all pairs — no resampling needed."""
-    n_all = n_sensors * n_sensors  # 64
+    """56R/56D uses all pairs (excl. self) — no resampling needed."""
+    n_all = n_sensors * (n_sensors - 1)  # 56
     return (n_ratios > 0 and n_ratios < n_all) or (n_diffs > 0 and n_diffs < n_all)
 
 
@@ -134,8 +134,8 @@ def build_expansion(data, deriv_cache, max_order, n_ratios, n_diffs, rp, dp):
 CONFIG_SPECS = {
     '\u2202\u00b9+\u2202\u00b2':              (2, 0, 0),
     '\u2202\u00b9+\u2202\u00b2 + 8R + 8D':    (2, 8, 8),
-    '\u2202\u00b9+\u2202\u00b2 + 64R + 64D':  (2, 64, 64),
-    '\u2202\u00b9\u207b\u2077 + 64R + 64D':   (7, 64, 64),
+    '\u2202\u00b9+\u2202\u00b2 + 56R + 56D':  (2, 56, 56),
+    '\u2202\u00b9\u207b\u2077 + 56R + 56D':   (7, 56, 56),
 }
 
 
@@ -247,7 +247,7 @@ def run_gridsearch_single(filename, pkl_path, n_train=450,
     y_train_t = torch.tensor(y_train_0, dtype=torch.long, device=device)
     y_test_t  = torch.tensor(y_test_0,  dtype=torch.long, device=device)
 
-    full_pairs = all_pairs_with_self(n_sensors)
+    full_pairs = all_ordered_pairs(n_sensors)
 
     for ci, cfg_name in enumerate(config_names):
         max_order, n_ratios, n_diffs = CONFIG_SPECS[cfg_name]
@@ -462,7 +462,7 @@ def run_gridsearch_binary(train_filename, test_filename, pkl_path,
     y_train_t = torch.tensor(y_train_0, dtype=torch.long, device=device)
     y_test_t  = torch.tensor(y_test_0,  dtype=torch.long, device=device)
 
-    full_pairs = all_pairs_with_self(n_sensors)
+    full_pairs = all_ordered_pairs(n_sensors)
 
     for ci, cfg_name in enumerate(config_names):
         max_order, n_ratios, n_diffs = CONFIG_SPECS[cfg_name]
