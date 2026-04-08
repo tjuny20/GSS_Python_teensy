@@ -6,8 +6,8 @@ Expand-and-sparsify gridsearch for GPU server.
 Configs (with per-repeat pair resampling for ratios & differences):
     ∂¹+∂²                  (24 traces)
     ∂¹+∂² + 8R + 8D        (40 traces)
-    ∂¹+∂² + 56R + 56D      (136 traces)
-    ∂¹⁻⁷ + 56R + 56D       (176 traces)
+    ∂¹+∂² + 64R + 64D      (152 traces)
+    ∂¹⁻⁷ + 64R + 64D       (192 traces)
 
 Single gas:    1_600_20 with n_train=450 sequence-based split
 Binary mix:    mix_100_20_1 (train) / mix_50_20_1 (test)
@@ -99,6 +99,17 @@ def sample_pairs(n_sensors, seed):
     return rp, dp
 
 
+def all_pairs_with_self(n_sensors):
+    """All n_sensors*n_sensors ordered pairs (including self)."""
+    return [(i, j) for i in range(n_sensors) for j in range(n_sensors)]
+
+
+def needs_resampling(n_ratios, n_diffs, n_sensors):
+    """64R/64D uses all pairs — no resampling needed."""
+    n_all = n_sensors * n_sensors  # 64
+    return (n_ratios > 0 and n_ratios < n_all) or (n_diffs > 0 and n_diffs < n_all)
+
+
 def make_ratios(data, pairs, n):
     return np.column_stack([data[:, i] / (data[:, j] + 1e-8)
                             for i, j in pairs[:n]])
@@ -123,8 +134,8 @@ def build_expansion(data, deriv_cache, max_order, n_ratios, n_diffs, rp, dp):
 CONFIG_SPECS = {
     '\u2202\u00b9+\u2202\u00b2':              (2, 0, 0),
     '\u2202\u00b9+\u2202\u00b2 + 8R + 8D':    (2, 8, 8),
-    '\u2202\u00b9+\u2202\u00b2 + 56R + 56D':  (2, 56, 56),
-    '\u2202\u00b9\u207b\u2077 + 56R + 56D':   (7, 56, 56),
+    '\u2202\u00b9+\u2202\u00b2 + 64R + 64D':  (2, 64, 64),
+    '\u2202\u00b9\u207b\u2077 + 64R + 64D':   (7, 64, 64),
 }
 
 
@@ -236,9 +247,12 @@ def run_gridsearch_single(filename, pkl_path, n_train=450,
     y_train_t = torch.tensor(y_train_0, dtype=torch.long, device=device)
     y_test_t  = torch.tensor(y_test_0,  dtype=torch.long, device=device)
 
+    full_pairs = all_pairs_with_self(n_sensors)
+
     for ci, cfg_name in enumerate(config_names):
         max_order, n_ratios, n_diffs = CONFIG_SPECS[cfg_name]
-        needs_pairs = n_ratios > 0 or n_diffs > 0
+        resample = needs_resampling(n_ratios, n_diffs, n_sensors)
+        has_pairs = n_ratios > 0 or n_diffs > 0
         print(f"\n  [{ci+1}/{len(config_names)}] {cfg_name}")
         t0_cfg = time.time()
 
@@ -246,17 +260,21 @@ def run_gridsearch_single(filename, pkl_path, n_train=450,
         seed_pairs = {}
         pairs_list = []
         for seed in range(n_repeats):
-            if needs_pairs:
+            if resample:
                 rp, dp = sample_pairs(n_sensors, seed)
                 seed_pairs[seed] = (rp, dp)
                 pairs_list.append((rp[:n_ratios], dp[:n_diffs]))
+            elif has_pairs:
+                # Full 64-pair set — deterministic
+                seed_pairs[seed] = (full_pairs, full_pairs)
+                pairs_list.append((full_pairs[:n_ratios], full_pairs[:n_diffs]))
             else:
                 seed_pairs[seed] = (None, None)
                 pairs_list.append(([], []))
         pair_log[cfg_name] = pairs_list
 
         # -- build reference expansion (seed=0) for cosine similarities --
-        if needs_pairs:
+        if has_pairs:
             rp0, dp0 = seed_pairs[0]
             x_dense = build_expansion(sensor_data, deriv_cache, max_order,
                                       n_ratios, n_diffs, rp0, dp0)
@@ -302,9 +320,9 @@ def run_gridsearch_single(filename, pkl_path, n_train=450,
                 accs = []
                 for seed in range(n_repeats):
                     torch.manual_seed(seed)
+                    rp, dp = seed_pairs[seed]
 
-                    if needs_pairs:
-                        rp, dp = seed_pairs[seed]
+                    if has_pairs:
                         x_exp = build_expansion(sensor_data, deriv_cache,
                                                 max_order, n_ratios, n_diffs,
                                                 rp, dp)
@@ -444,9 +462,12 @@ def run_gridsearch_binary(train_filename, test_filename, pkl_path,
     y_train_t = torch.tensor(y_train_0, dtype=torch.long, device=device)
     y_test_t  = torch.tensor(y_test_0,  dtype=torch.long, device=device)
 
+    full_pairs = all_pairs_with_self(n_sensors)
+
     for ci, cfg_name in enumerate(config_names):
         max_order, n_ratios, n_diffs = CONFIG_SPECS[cfg_name]
-        needs_pairs = n_ratios > 0 or n_diffs > 0
+        resample = needs_resampling(n_ratios, n_diffs, n_sensors)
+        has_pairs = n_ratios > 0 or n_diffs > 0
         print(f"\n  [{ci+1}/{len(config_names)}] {cfg_name}")
         t0_cfg = time.time()
 
@@ -454,17 +475,20 @@ def run_gridsearch_binary(train_filename, test_filename, pkl_path,
         seed_pairs = {}
         pairs_list = []
         for seed in range(n_repeats):
-            if needs_pairs:
+            if resample:
                 rp, dp = sample_pairs(n_sensors, seed)
                 seed_pairs[seed] = (rp, dp)
                 pairs_list.append((rp[:n_ratios], dp[:n_diffs]))
+            elif has_pairs:
+                seed_pairs[seed] = (full_pairs, full_pairs)
+                pairs_list.append((full_pairs[:n_ratios], full_pairs[:n_diffs]))
             else:
                 seed_pairs[seed] = (None, None)
                 pairs_list.append(([], []))
         pair_log[cfg_name] = pairs_list
 
         # -- build reference expansion (seed=0) for cosine similarities --
-        if needs_pairs:
+        if has_pairs:
             rp0, dp0 = seed_pairs[0]
             x_train_dense = build_expansion(train_sensor, deriv_cache_train,
                                             max_order, n_ratios, n_diffs, rp0, dp0)
@@ -510,9 +534,9 @@ def run_gridsearch_binary(train_filename, test_filename, pkl_path,
                 accs = []
                 for seed in range(n_repeats):
                     torch.manual_seed(seed)
+                    rp, dp = seed_pairs[seed]
 
-                    if needs_pairs:
-                        rp, dp = seed_pairs[seed]
+                    if has_pairs:
                         x_exp_train = build_expansion(
                             train_sensor, deriv_cache_train, max_order,
                             n_ratios, n_diffs, rp, dp)

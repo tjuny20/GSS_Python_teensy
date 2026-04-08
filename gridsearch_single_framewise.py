@@ -49,34 +49,78 @@ def expand_with_derivatives(data, h, max_order):
     return np.hstack([data] + derivs)
 
 
-# Pre-generate pair pools (ordered pairs, fixed seed)
-rng_pairs = np.random.default_rng(0)
-all_ordered_pairs = [(i, j) for i in range(n_sensors) for j in range(n_sensors) if i != j]
-ratio_pairs = [all_ordered_pairs[i] for i in rng_pairs.permutation(len(all_ordered_pairs))]
-diff_pairs  = [all_ordered_pairs[i] for i in rng_pairs.permutation(len(all_ordered_pairs))]
+# --- Per-fold pair resampling ---
+all_ordered_pairs = [(i, j) for i in range(n_sensors)
+                            for j in range(n_sensors) if i != j]   # 56 pairs
+all_pairs_with_self = [(i, j) for i in range(n_sensors)
+                              for j in range(n_sensors)]            # 64 pairs
+
+def sample_pairs(seed):
+    """Return fresh ratio_pairs and diff_pairs for a given seed."""
+    rng_p = np.random.default_rng(seed)
+    rp = [all_ordered_pairs[i] for i in rng_p.permutation(len(all_ordered_pairs))]
+    dp = [all_ordered_pairs[i] for i in rng_p.permutation(len(all_ordered_pairs))]
+    return rp, dp
+
+def needs_resampling(n_ratios, n_diffs):
+    """64R/64D uses all pairs — no resampling needed."""
+    n_all = n_sensors * n_sensors  # 64
+    return (n_ratios > 0 and n_ratios < n_all) or (n_diffs > 0 and n_diffs < n_all)
+
+def make_ratios(data, pairs, n):
+    return np.column_stack([data[:, i] / (data[:, j] + 1e-8) for i, j in pairs[:n]])
+
+def make_diffs(data, pairs, n):
+    return np.column_stack([data[:, i] - data[:, j] for i, j in pairs[:n]])
+
+def build_expansion(data, deriv_cache, max_order, n_ratios, n_diffs, rp, dp):
+    parts = [deriv_cache[max_order]]
+    if n_ratios > 0:
+        parts.append(make_ratios(data, rp, n_ratios))
+    if n_diffs > 0:
+        parts.append(make_diffs(data, dp, n_diffs))
+    return np.hstack(parts) if len(parts) > 1 else parts[0]
 
 
-# --- Build 32-trace expansion configs (excluding 12R + 12D) ---
-x_d1   = expand_with_derivatives(sensor_data, h, max_order=1)   # 16 cols
-x_d12  = expand_with_derivatives(sensor_data, h, max_order=2)   # 24 cols
-x_d123 = expand_with_derivatives(sensor_data, h, max_order=3)   # 32 cols
-
-r8 = np.column_stack([sensor_data[:, i] / (sensor_data[:, j] + 1e-8) for i, j in ratio_pairs[:8]])
-d8 = np.column_stack([sensor_data[:, i] - sensor_data[:, j] for i, j in diff_pairs[:8]])
-
-expansion_configs = {
-    '∂¹+∂²+∂³':     x_d123,
-    '∂¹+∂² + 8R':   np.hstack([x_d12, r8]),
-    '∂¹+∂² + 8D':   np.hstack([x_d12, d8]),
-    '∂¹ + 8R + 8D':  np.hstack([x_d1, r8, d8]),
+# --- Config specs (same as run_expand_and_sparsify_mixed.py) ---
+CONFIG_SPECS = {
+    '∂¹+∂²':              (2, 0, 0),
+    '∂¹+∂² + 8R + 8D':    (2, 8, 8),
+    '∂¹+∂² + 64R + 64D':  (2, 64, 64),
+    '∂¹⁻⁷ + 64R + 64D':   (7, 64, 64),
 }
+
+# Precompute derivative expansions (deterministic, no pairs)
+deriv_orders = set(spec[0] for spec in CONFIG_SPECS.values())
+deriv_cache = {order: expand_with_derivatives(sensor_data, h, max_order=order)
+               for order in deriv_orders}
 
 
 # --- Grid search ---
 params = {'expansion': [], 'p_hd': [], 'd': [], 'p': [], 'normalized': [], 'kernel': [], 'n_fold': []}
 results = {'train_acc': [], 'test_acc': [], 'y_pred': [], 'y_true': []}
+pair_log = {}  # exp_name -> [(rp, dp), ...] length grid_n_fold
 
-for exp_name, expanded_data in expansion_configs.items():
+for exp_name, (max_order, n_ratios, n_diffs) in CONFIG_SPECS.items():
+    resample = needs_resampling(n_ratios, n_diffs)
+    has_pairs = n_ratios > 0 or n_diffs > 0
+
+    # Pre-sample pairs for all folds
+    pairs_list = []
+    fold_pairs = {}
+    for fold in range(grid_n_fold):
+        if resample:
+            rp, dp = sample_pairs(fold)
+            fold_pairs[fold] = (rp, dp)
+            pairs_list.append((rp[:n_ratios], dp[:n_diffs]))
+        elif has_pairs:
+            fold_pairs[fold] = (all_pairs_with_self, all_pairs_with_self)
+            pairs_list.append((all_pairs_with_self[:n_ratios], all_pairs_with_self[:n_diffs]))
+        else:
+            fold_pairs[fold] = (None, None)
+            pairs_list.append(([], []))
+    pair_log[exp_name] = pairs_list
+
     for kernel in grid_kernel:
         for p_hd in grid_p_hd:
             for d in grid_d:
@@ -84,6 +128,15 @@ for exp_name, expanded_data in expansion_configs.items():
                     for normalized in grid_normalized:
                         for n_fold in range(grid_n_fold):
                             k = int(d * n_hd)
+
+                            # Build expansion with per-fold pairs
+                            if has_pairs:
+                                rp, dp = fold_pairs[n_fold]
+                                expanded_data = build_expansion(
+                                    sensor_data, deriv_cache, max_order,
+                                    n_ratios, n_diffs, rp, dp)
+                            else:
+                                expanded_data = deriv_cache[max_order]
 
                             # Build train labels (only first n_train sequences)
                             labels = np.zeros_like(times_sec)
@@ -187,7 +240,8 @@ for k in ['train_acc', 'test_acc']:
 results['y_pred'] = np.array(results['y_pred'], dtype=object)
 results['y_true'] = np.array(results['y_true'], dtype=object)
 
-data = {'params': params, 'results': results}
+data = {'params': params, 'results': results, 'pair_log': pair_log,
+        'config_specs': dict(CONFIG_SPECS)}
 
 with open(f'data/{file_save}.pkl', 'wb') as f:
     pickle.dump(data, f)
