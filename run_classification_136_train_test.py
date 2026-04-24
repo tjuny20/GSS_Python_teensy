@@ -2,12 +2,9 @@
 Compute train + test accuracy for the ∂¹+∂² + 56R + 56D (136 traces) expansion
 across classification methods:
   1. Linear SVM (Crammer-Singer, 80/20 stratified, 100 seeds)
-  2. RBF SVM (sklearn, 80/20 stratified, 100 seeds, gridsearch params)
-  3. Polynomial SVM (sklearn, 80/20 stratified, 100 seeds, gridsearch params)
+  2. RBF SVM (sklearn, C=50, gamma='scale', 80/20 stratified, 100 seeds)
+  3. Polynomial SVM (sklearn, degree=3, C=50, gamma='scale', 80/20 stratified, 100 seeds)
   4. Expand & sparsify + linear classifier (sequence-based split, best params, 10 seeds)
-
-RBF and polynomial SVM params are loaded from data/gridsearch_svm_136.pkl
-(produced by run_gridsearch_svm_136.py).
 
 Results are saved to data/classification_136_train_test.pkl
 """
@@ -25,23 +22,6 @@ pkl_136 = 'data/classification_136_train_test.pkl'
 if os.path.exists(pkl_136):
     print(f"{pkl_136} already exists -- delete to recompute.")
     raise SystemExit(0)
-
-
-# ── Load gridsearch results ──────────────────────────────────────────────
-
-pkl_gs = 'data/gridsearch_svm_136.pkl'
-with open(pkl_gs, 'rb') as f:
-    gs = pickle.load(f)
-
-rbf_best_C     = gs['rbf_best_params']['C']
-rbf_best_gamma = gs['rbf_best_params']['gamma']
-poly_best_C      = gs['poly_best_params']['C']
-poly_best_gamma  = gs['poly_best_params']['gamma']
-poly_best_degree = gs['poly_best_params']['degree']
-
-print(f"RBF params:  C={rbf_best_C}, gamma={rbf_best_gamma}")
-print(f"Poly params: C={poly_best_C}, gamma={poly_best_gamma}, "
-      f"degree={poly_best_degree}")
 
 
 # ── Expansion helpers ─────────────────────────────────────────────────────
@@ -123,13 +103,10 @@ def score_linear_svm(X, y, W, b):
 
 
 # ══════════════════════════════════════════════════════════════════════════
-#  Linear SVM, RBF SVM & Polynomial SVM  (80/20 stratified split, 100 seeds)
+#  Linear SVM & RBF SVM  (80/20 stratified split, 100 seeds)
 # ══════════════════════════════════════════════════════════════════════════
 
 res_136 = {}
-res_136['rbf_best_params']  = dict(C=rbf_best_C, gamma=rbf_best_gamma)
-res_136['poly_best_params'] = dict(C=poly_best_C, gamma=poly_best_gamma,
-                                   degree=poly_best_degree)
 n_repeats_svm = 100
 
 for filename, key in [('1_600_20', 'single'), ('mix_100_20_1', 'mix')]:
@@ -156,12 +133,12 @@ for filename, key in [('1_600_20', 'single'), ('mix_100_20_1', 'mix')]:
     print(f"Linear SVM {key}: train={np.mean(tr_l):.4f}±{np.std(tr_l):.4f}  "
           f"test={np.mean(te_l):.4f}±{np.std(te_l):.4f}")
 
-    # --- RBF SVM (gridsearch params) ---
+    # --- RBF SVM ---
     tr_r, te_r = [], []
     for seed in range(n_repeats_svm):
         tr_idx, te_idx = train_test_split(
             np.arange(len(y)), test_size=0.2, random_state=seed, stratify=y)
-        clf = SVC(kernel='rbf', C=rbf_best_C, gamma=rbf_best_gamma)
+        clf = SVC(kernel='rbf', C=50, gamma='scale')
         clf.fit(x[tr_idx], y[tr_idx])
         tr_r.append(clf.score(x[tr_idx], y[tr_idx]))
         te_r.append(clf.score(x[te_idx], y[te_idx]))
@@ -170,13 +147,12 @@ for filename, key in [('1_600_20', 'single'), ('mix_100_20_1', 'mix')]:
     print(f"RBF SVM {key}:    train={np.mean(tr_r):.4f}±{np.std(tr_r):.4f}  "
           f"test={np.mean(te_r):.4f}±{np.std(te_r):.4f}")
 
-    # --- Polynomial SVM (gridsearch params) ---
+    # --- Polynomial SVM ---
     tr_p, te_p = [], []
     for seed in range(n_repeats_svm):
         tr_idx, te_idx = train_test_split(
             np.arange(len(y)), test_size=0.2, random_state=seed, stratify=y)
-        clf = SVC(kernel='poly', C=poly_best_C, gamma=poly_best_gamma,
-                  degree=poly_best_degree)
+        clf = SVC(kernel='poly', degree=3, C=50, gamma='scale')
         clf.fit(x[tr_idx], y[tr_idx])
         tr_p.append(clf.score(x[tr_idx], y[tr_idx]))
         te_p.append(clf.score(x[te_idx], y[te_idx]))
