@@ -1,5 +1,5 @@
 """
-Gridsearch for RBF and polynomial SVM hyperparameters on the
+Gridsearch for RBF SVM hyperparameters on the
 ∂¹+∂² + 56R + 56D (136 traces) expansion, using the binary mixture
 dataset (mix_100_20_1).
 
@@ -83,8 +83,8 @@ y, mask = make_labels(ts, seq, ss)
 x = build_136(sd, h)[mask]
 
 cv = StratifiedShuffleSplit(n_splits=5, test_size=0.2, random_state=42)
-C_range     = np.logspace(-2, 10, 13)
-gamma_range = np.logspace(-9, 3, 13)
+C_range     = np.logspace(-2, 10, 10)
+gamma_range = np.logspace(-9, 3, 10)
 
 # --- RBF gridsearch ---
 print("Running RBF gridsearch ...")
@@ -96,29 +96,13 @@ print(f"RBF best: C={rbf_grid.best_params_['C']}, "
       f"gamma={rbf_grid.best_params_['gamma']}, "
       f"score={rbf_grid.best_score_:.4f}")
 
-# --- Polynomial gridsearch ---
-print("Running polynomial gridsearch ...")
-degree_range = [2, 3, 4, 5]
-poly_grid = GridSearchCV(SVC(kernel='poly'),
-                         param_grid=dict(C=C_range, gamma=gamma_range,
-                                         degree=degree_range),
-                         cv=cv, n_jobs=-1)
-poly_grid.fit(x, y)
-print(f"Poly best: C={poly_grid.best_params_['C']}, "
-      f"gamma={poly_grid.best_params_['gamma']}, "
-      f"degree={poly_grid.best_params_['degree']}, "
-      f"score={poly_grid.best_score_:.4f}")
-
 # ── Save ──────────────────────────────────────────────────────────────────
 
 results = {
     'rbf_best_params':  rbf_grid.best_params_,
     'rbf_best_score':   rbf_grid.best_score_,
-    'poly_best_params': poly_grid.best_params_,
-    'poly_best_score':  poly_grid.best_score_,
     'C_range':          C_range,
     'gamma_range':      gamma_range,
-    'degree_range':     degree_range,
     'cv_n_splits':      5,
     'cv_test_size':     0.2,
     'dataset':          'mix_100_20_1',
