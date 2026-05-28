@@ -3,12 +3,12 @@ Gridsearch for the 'Hazardous emission detection - texel' notebook.
 
 Sweeps:
     N  — number of training presentations (first N from the corrected sequence)
-    k  — top-k sparsification in the expand-and-sparsify layer
+    s  — sparsity of the expand-and-sparsify layer; k = round(s * n_hd)
 
 Fixed (same as the notebook):
     dataset      = '1_600_20_corrected'  (gap-fixed sequence)
     expansion    = ∂¹+∂² + 56R + 56D  (136 features)
-    n_hd         = 3000
+    n_hd         = 4640
     p_hd         = 0.025
     p            = 1.0    (Hebbian flip probability per active HD component)
     n_out        = 2      (neuron 0 = hazardous, neuron 1 = not hazardous)
@@ -20,8 +20,8 @@ Two evaluation methods per run:
                θ swept over the unique training-set scores; θ* chosen by
                training accuracy, then evaluated on the test set.
 
-Per (N, k, seed) the script stores: train / test accuracy for both methods
-and the selected θ*.
+Per (N, s, seed) the script stores: train / test accuracy for both methods,
+the selected θ*, and the derived k.
 
 Output: data/hazardous_emission_gridsearch.pkl
 """
@@ -34,9 +34,9 @@ from tools import load
 
 
 # ── Sweep grid ─────────────────────────────────────────────────────────────
-N_LIST = [5, 10, 25, 50, 100, 200, 400]
-K_LIST = [10, 30, 50, 100, 300, 900, 1500]
-SEEDS  = [0, 1, 2, 3, 4]                # repeat each (N, k) with several seeds
+N_LIST = [1, 2, 3, 5, 10, 20, 50, 100, 200]
+S_LIST = [0.003, 0.01, 0.017, 0.033, 0.1, 0.167, 0.333, 0.5]  # sparsity; k = round(s * N_HD)
+SEEDS  = np.arange(50)                # repeat each (N, k) with several seeds
 
 # ── Fixed config (same as the notebook) ────────────────────────────────────
 FILENAME       = '1_600_20_corrected'
@@ -136,7 +136,7 @@ def threshold_sweep(score_tr, y_tr_pos, score_te, y_te_pos):
 # ── Sweep ──────────────────────────────────────────────────────────────────
 records = []
 t0 = time.time()
-n_runs_total = len(SEEDS) * len(K_LIST) * len(N_LIST)
+n_runs_total = len(SEEDS) * len(S_LIST) * len(N_LIST)
 n_done = 0
 
 for seed in SEEDS:
@@ -148,7 +148,8 @@ for seed in SEEDS:
     # Pre-rank once and slice the top-k mask per k.
     neg_ranks = np.argsort(np.argsort(-x_hd, axis=1), axis=1)
 
-    for k in K_LIST:
+    for s in S_LIST:
+        k = int(round(s * N_HD))
         z_hd = (neg_ranks < k).astype(np.float32)
 
         for N in N_LIST:
@@ -179,6 +180,7 @@ for seed in SEEDS:
             records.append({
                 'seed':         seed,
                 'N':            N,
+                's':            s,
                 'k':            k,
                 'n_train_frames': int(train_mask.sum()),
                 'acc_argmax_train': acc_arg_tr,
@@ -190,7 +192,7 @@ for seed in SEEDS:
 
             n_done += 1
             print(f'[{n_done:3d}/{n_runs_total}]  '
-                  f'seed={seed}  N={N:>4d}  k={k:>4d}  '
+                  f'seed={seed}  N={N:>4d}  s={s:>6.3f}  k={k:>4d}  '
                   f'argmax(tr/te)={acc_arg_tr:.3f}/{acc_arg_te:.3f}  '
                   f'thresh(tr/te)={acc_thr_tr:.3f}/{acc_thr_te:.3f}  '
                   f'θ*={best_thr:.4f}')
@@ -208,7 +210,8 @@ results = {
         'hazardous_gas':  sorted(HAZARDOUS_GAS),
         'n_test_seq':     N_TEST_SEQ,
         'N_list':         N_LIST,
-        'k_list':         K_LIST,
+        's_list':         S_LIST,
+        'k_list':         [int(round(s * N_HD)) for s in S_LIST],
         'seeds':          SEEDS,
         'expansion':      '∂¹+∂² + 56R + 56D',
         'n_dense':        n_dense,
